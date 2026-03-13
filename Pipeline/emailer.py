@@ -5,12 +5,10 @@ This module provides functions to generate email bodies with investment analysis
 information and send emails with attachments (Excel models and Word summaries).
 """
 
-import smtplib
+import base64
+import os
+import requests
 from datetime import datetime
-from email import encoders
-from email.mime.base import MIMEBase
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 from pathlib import Path
 
 from config import EMAIL_CFG
@@ -198,34 +196,44 @@ def generate_email_body(search_meta, comp_summary, excel_fn, docx_fn,
 
 def send_email(to_addr, subject, body, attachment_paths):
     """
-    Send the investment summary email with one or more file attachments.
+    Send the investment summary email with one or more file attachments via Resend API.
     attachment_paths: a single Path/str, or a list of Path/str.
     Email is skipped when email.enabled = false in config.json.
+    Requires RESEND_API_KEY environment variable.
     """
     if not EMAIL_CFG.get("enabled"):
         print("  [Email] Disabled in config — skipping send.")
         return
 
+    api_key = os.environ.get("RESEND_API_KEY") or EMAIL_CFG.get("resend_api_key", "")
+    if not api_key:
+        print("  [Email] No RESEND_API_KEY set — skipping send.")
+        return
+
     if isinstance(attachment_paths, (str, Path)):
         attachment_paths = [attachment_paths]
 
-    msg = MIMEMultipart()
-    msg["From"]    = EMAIL_CFG["sender"]
-    msg["To"]      = to_addr
-    msg["Subject"] = subject
-    msg.attach(MIMEText(body, "plain"))
-
+    attachments = []
     for ap in attachment_paths:
         with open(ap, "rb") as f:
-            part = MIMEBase("application", "octet-stream")
-            part.set_payload(f.read())
-        encoders.encode_base64(part)
-        part.add_header("Content-Disposition",
-                        f'attachment; filename="{Path(ap).name}"')
-        msg.attach(part)
+            content = base64.b64encode(f.read()).decode()
+        attachments.append({"filename": Path(ap).name, "content": content})
 
-    smtp_user = EMAIL_CFG.get("smtp_user", EMAIL_CFG["sender"])
-    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-        server.login(smtp_user, EMAIL_CFG["app_password"])
-        server.sendmail(EMAIL_CFG["sender"], to_addr, msg.as_string())
-    print(f"  [Email] Sent to {to_addr} ({len(attachment_paths)} attachment(s))")
+    sender = EMAIL_CFG.get("sender") or "Ping Analyst <onboarding@resend.dev>"
+
+    payload = {
+        "from":        sender,
+        "to":          [to_addr],
+        "subject":     subject,
+        "text":        body,
+        "attachments": attachments,
+    }
+
+    resp = requests.post(
+        "https://api.resend.com/emails",
+        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+        json=payload,
+        timeout=30,
+    )
+    resp.raise_for_status()
+    print(f"  [Email] Sent to {to_addr} via Resend ({len(attachment_paths)} attachment(s))")
