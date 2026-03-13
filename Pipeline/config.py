@@ -1,14 +1,16 @@
 """
 config.py — Ping Pipeline Configuration
 -----------------------------------------
-Loads config.json and exposes typed constants used across all modules.
+Loads config.json if present (local dev) and exposes typed constants used
+across all modules. On Railway/cloud, config.json is absent — all values
+must be supplied via environment variables instead.
 All paths are resolved relative to this file's parent directory.
 
-Environment variable overrides (for Render / external hosting):
+Environment variables (required on Railway, override config.json locally):
     RENTCAST_API_KEY  — RentCast API key
     GAS_URL           — Google Apps Script web app URL
     SHEET_ID          — Google Sheets spreadsheet ID
-    OUTPUT_DIR        — Output directory path (default: ./output, use /tmp/ping_output on server)
+    OUTPUT_DIR        — Output directory path (default: /tmp/ping_output on server)
     EMAIL_ENABLED     — "true"/"false"
     SMTP_HOST         — SMTP server hostname
     SMTP_PORT         — SMTP port (default 587)
@@ -23,19 +25,23 @@ from pathlib import Path
 PIPELINE_DIR   = Path(__file__).parent
 CONFIG_PATH    = PIPELINE_DIR / "config.json"
 
-with open(CONFIG_PATH) as _f:
-    _CFG = json.load(_f)
+# Load config.json if present (local dev); fall back to empty dict (env-var-only mode)
+if CONFIG_PATH.exists():
+    with open(CONFIG_PATH) as _f:
+        _CFG = json.load(_f)
+else:
+    _CFG = {}
 
 # ── External services (env vars override config.json) ──────────────────────────
 GAS_URL        = os.environ.get("GAS_URL")           or _CFG.get("gas_url", "")
 SHEET_ID       = os.environ.get("SHEET_ID")          or _CFG.get("sheet_id", "")
-RC_KEY         = os.environ.get("RENTCAST_API_KEY")  or _CFG["rentcast_api_key"]
-RC_BASE        = _CFG["rentcast_base_url"]
+RC_KEY         = os.environ.get("RENTCAST_API_KEY")  or _CFG.get("rentcast_api_key", "")
+RC_BASE        = os.environ.get("RENTCAST_BASE_URL") or _CFG.get("rentcast_base_url", "https://api.rentcast.io/v1")
 
 # ── Paths ──────────────────────────────────────────────────────────────────────
-TEMPLATE_PATH  = (PIPELINE_DIR / _CFG["excel_template"]).resolve()
-# OUTPUT_DIR: use env var if set (e.g. /tmp/ping_output on Render), else config.json value
-OUTPUT_DIR     = Path(os.environ.get("OUTPUT_DIR") or (PIPELINE_DIR / _CFG["output_dir"]).resolve())
+TEMPLATE_PATH  = (PIPELINE_DIR / _CFG.get("excel_template", "templates/Multifamily Underwriting Template V1.xlsx")).resolve()
+# OUTPUT_DIR: use env var if set (e.g. /tmp/ping_output on Railway), else config.json value, else default
+OUTPUT_DIR     = Path(os.environ.get("OUTPUT_DIR") or (PIPELINE_DIR / _CFG.get("output_dir", "output")).resolve())
 PROCESSED_PATH = PIPELINE_DIR / "processed.json"
 
 # ── Email (env vars override config.json) ──────────────────────────────────────
