@@ -126,6 +126,7 @@ def generate_summary_docx(job_dir, search_meta, comp_summary, all_comp_rows=None
 
     # Use actual per-type unit counts when available (embedded by main.py).
     # Fall back to even distribution across types that have comp data.
+    _unit_cnts = []
     if any(s.get("units", 0) for s in comp_summary):
         gross_monthly = sum(
             (s.get("units") or 0) * (s.get("avg_rent") or 0)
@@ -291,7 +292,7 @@ def generate_summary_docx(job_dir, search_meta, comp_summary, all_comp_rows=None
     _section_header(doc, "PROJECTED INCOME  (at market rents)")
     inc_rows = []
     for i, s in enumerate(comp_summary):
-        n       = _unit_cnts[i] if i < len(_unit_cnts) else 0
+        n       = s.get("units") or (_unit_cnts[i] if i < len(_unit_cnts) else 0)
         monthly = n * (s.get("avg_rent") or 0)
         inc_rows.append(
             (f"  {s['beds']}BD/{s['baths']}BA  ×  {n} units",
