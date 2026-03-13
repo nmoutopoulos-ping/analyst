@@ -291,7 +291,7 @@ def generate_summary_docx(job_dir, search_meta, comp_summary, all_comp_rows=None
     _section_header(doc, "PROJECTED INCOME  (at market rents)")
     inc_rows = []
     for i, s in enumerate(comp_summary):
-        n       = unit_cnts[i] if i < len(unit_cnts) else 0
+        n       = _unit_cnts[i] if i < len(_unit_cnts) else 0
         monthly = n * (s.get("avg_rent") or 0)
         inc_rows.append(
             (f"  {s['beds']}BD/{s['baths']}BA  ×  {n} units",
