@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Ping Admin</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --navy:     #0F172A;
+    --blue:     #3B82F6;
+    --blue-d:   #2563EB;
+    --red:      #EF4444;
+    --red-d:    #DC2626;
+    --green:    #10B981;
+    --bg:       #F8FAFC;
+    --surface:  #FFFFFF;
+    --border:   #E2E8F0;
+    --text-1:   #0F172A;
+    --text-2:   #64748B;
+    --text-3:   #94A3B8;
+    --r:        8px;
+    --r-sm:     5px;
+    --shadow:   0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.06);
+  }
+
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+         background: var(--bg); color: var(--text-1); font-size: 14px; min-height: 100vh; }
+
+  /* ── Login ── */
+  #loginView {
+    min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  }
+  .login-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--r);
+    box-shadow: var(--shadow); padding: 36px 40px; width: 100%; max-width: 360px;
+  }
+  .login-logo { display: flex; align-items: baseline; gap: 6px; margin-bottom: 24px; }
+  .login-logo-ping { font-size: 22px; font-weight: 800; color: var(--blue); letter-spacing: -0.5px; }
+  .login-logo-sub  { font-size: 13px; color: var(--text-2); font-weight: 500; }
+  .login-title { font-size: 16px; font-weight: 700; color: var(--text-1); margin-bottom: 20px; }
+  .login-field { margin-bottom: 14px; }
+  .login-field label { display: block; font-size: 12px; font-weight: 600; color: var(--text-2);
+                        text-transform: uppercase; letter-spacing: .5px; margin-bottom: 5px; }
+  .login-field input { width: 100%; padding: 9px 12px; border: 1px solid var(--border);
+                        border-radius: var(--r-sm); font-size: 14px; outline: none;
+                        transition: border-color .15s; }
+  .login-field input:focus { border-color: var(--blue); }
+  .login-error { font-size: 13px; color: var(--red); margin-bottom: 10px; min-height: 18px; }
+  .btn-full { width: 100%; padding: 10px; background: var(--blue); color: #fff;
+              border: none; border-radius: var(--r-sm); font-size: 14px; font-weight: 600;
+              cursor: pointer; transition: background .15s; }
+  .btn-full:hover { background: var(--blue-d); }
+
+  /* ── Admin shell ── */
+  #adminView { display: none; min-height: 100vh; }
+
+  .topbar {
+    background: var(--navy); padding: 0 28px; height: 52px;
+    display: flex; align-items: center; justify-content: space-between;
+    position: sticky; top: 0; z-index: 100;
+  }
+  .topbar-logo { display: flex; align-items: baseline; gap: 7px; }
+  .topbar-ping { font-size: 18px; font-weight: 800; color: var(--blue); letter-spacing: -0.5px; }
+  .topbar-label { font-size: 12px; color: #94A3B8; font-weight: 500; letter-spacing: .5px;
+                   text-transform: uppercase; }
+  .topbar-right { display: flex; align-items: center; gap: 16px; }
+  .user-count { font-size: 13px; color: #64748B; }
+  .btn-signout { background: none; border: 1px solid #334155; color: #94A3B8;
+                  padding: 5px 12px; border-radius: var(--r-sm); font-size: 12px;
+                  cursor: pointer; transition: all .15s; }
+  .btn-signout:hover { border-color: #94A3B8; color: #fff; }
+
+  .page { max-width: 820px; margin: 0 auto; padding: 28px 20px; }
+
+  /* ── Deploy banner ── */
+  .deploy-banner {
+    background: #FEF3C7; border: 1px solid #F59E0B; border-radius: var(--r);
+    padding: 11px 16px; margin-bottom: 24px;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    flex-wrap: wrap;
+  }
+  .deploy-banner-text { font-size: 13px; color: #92400E; }
+  .deploy-banner-text strong { font-weight: 700; }
+  .btn-download { background: #F59E0B; color: #fff; border: none; padding: 6px 14px;
+                   border-radius: var(--r-sm); font-size: 12px; font-weight: 600;
+                   cursor: pointer; white-space: nowrap; transition: background .15s; }
+  .btn-download:hover { background: #D97706; }
+
+  /* ── Card ── */
+  .card { background: var(--surface); border: 1px solid var(--border);
+           border-radius: var(--r); box-shadow: var(--shadow); margin-bottom: 20px; }
+  .card-header { padding: 14px 20px; border-bottom: 1px solid var(--border);
+                  display: flex; align-items: center; justify-content: space-between; }
+  .card-title { font-size: 13px; font-weight: 700; color: var(--text-1); }
+  .card-body  { padding: 20px; }
+
+  /* ── Add user form ── */
+  .add-form { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
+  .add-field { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 160px; }
+  .add-field label { font-size: 11px; font-weight: 600; color: var(--text-2);
+                      text-transform: uppercase; letter-spacing: .5px; }
+  .add-field input { padding: 8px 11px; border: 1px solid var(--border);
+                      border-radius: var(--r-sm); font-size: 13px; outline: none;
+                      transition: border-color .15s; }
+  .add-field input:focus { border-color: var(--blue); }
+  .btn-add { background: var(--blue); color: #fff; border: none; padding: 8px 18px;
+              border-radius: var(--r-sm); font-size: 13px; font-weight: 600;
+              cursor: pointer; white-space: nowrap; transition: background .15s; height: 36px; }
+  .btn-add:hover { background: var(--blue-d); }
+  .btn-add:disabled { opacity: .5; cursor: not-allowed; }
+  .add-error { font-size: 13px; color: var(--red); margin-top: 10px; min-height: 18px; }
+
+  /* ── New key reveal ── */
+  .new-key-banner {
+    background: #ECFDF5; border: 1px solid #6EE7B7; border-radius: var(--r);
+    padding: 14px 18px; margin-bottom: 20px; display: none;
+  }
+  .new-key-banner.on { display: block; }
+  .new-key-top { font-size: 13px; font-weight: 700; color: #065F46; margin-bottom: 8px; }
+  .new-key-row { display: flex; align-items: center; gap: 10px; }
+  .new-key-value { font-family: monospace; font-size: 17px; font-weight: 700;
+                    color: #047857; letter-spacing: 1px; }
+  .btn-copy { background: #D1FAE5; border: 1px solid #6EE7B7; color: #065F46;
+               padding: 5px 12px; border-radius: var(--r-sm); font-size: 12px;
+               font-weight: 600; cursor: pointer; transition: background .15s; }
+  .btn-copy:hover { background: #A7F3D0; }
+  .copy-confirm { font-size: 12px; color: var(--green); font-weight: 600; display: none; }
+  .copy-confirm.on { display: inline; }
+  .new-key-meta { font-size: 12px; color: #059669; margin-top: 6px; }
+
+  /* ── Users table ── */
+  .user-count-label { font-size: 12px; color: var(--text-2); }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font-size: 11px; font-weight: 700; color: var(--text-2);
+       text-transform: uppercase; letter-spacing: .5px; padding: 10px 14px;
+       border-bottom: 1px solid var(--border); }
+  td { padding: 12px 14px; border-bottom: 1px solid var(--border); font-size: 13px;
+       vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #F8FAFC; }
+  .key-cell { font-family: monospace; font-weight: 700; color: var(--blue);
+               letter-spacing: .5px; font-size: 13px; }
+  .name-cell { font-weight: 600; }
+  .email-cell { color: var(--text-2); }
+  .btn-revoke { background: none; border: 1px solid var(--border); color: var(--text-2);
+                 padding: 4px 10px; border-radius: var(--r-sm); font-size: 12px;
+                 cursor: pointer; transition: all .15s; font-weight: 500; }
+  .btn-revoke:hover { background: #FEF2F2; border-color: var(--red); color: var(--red); }
+  .empty-users { text-align: center; padding: 32px; color: var(--text-3); font-size: 13px; }
+
+  /* ── Confirm modal ── */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.45);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 200; display: none;
+  }
+  .modal-overlay.on { display: flex; }
+  .modal { background: var(--surface); border-radius: var(--r); padding: 28px 32px;
+            max-width: 380px; width: 90%; box-shadow: 0 20px 60px rgba(0,0,0,.2); }
+  .modal-title { font-size: 16px; font-weight: 700; margin-bottom: 8px; }
+  .modal-body  { font-size: 13px; color: var(--text-2); margin-bottom: 20px; line-height: 1.5; }
+  .modal-key   { font-family: monospace; color: var(--text-1); font-weight: 700; }
+  .modal-btns  { display: flex; gap: 10px; justify-content: flex-end; }
+  .btn-cancel  { background: none; border: 1px solid var(--border); padding: 8px 16px;
+                  border-radius: var(--r-sm); font-size: 13px; cursor: pointer; }
+  .btn-cancel:hover { background: var(--bg); }
+  .btn-confirm-revoke { background: var(--red); color: #fff; border: none; padding: 8px 16px;
+                         border-radius: var(--r-sm); font-size: 13px; font-weight: 600; cursor: pointer; }
+  .btn-confirm-revoke:hover { background: var(--red-d); }
+</style>
+</head>
+<body>
+
+<!-- ══════════════ LOGIN ══════════════ -->
+<div id="loginView">
+  <div class="login-card">
+    <div class="login-logo">
+      <span class="login-logo-ping">PING</span>
+      <span class="login-logo-sub">Admin</span>
+    </div>
+    <div class="login-title">Sign in to continue</div>
+    <div class="login-field">
+      <label for="passwordInput">Admin Password</label>
+      <input id="passwordInput" type="password" placeholder="••••••••" autofocus/>
+    </div>
+    <div class="login-error" id="loginError"></div>
+    <button class="btn-full" id="loginBtn">Sign In</button>
+  </div>
+</div>
+
+<!-- ══════════════ ADMIN ══════════════ -->
+<div id="adminView">
+
+  <div class="topbar">
+    <div class="topbar-logo">
+      <span class="topbar-ping">PING</span>
+      <span class="topbar-label">Admin</span>
+    </div>
+    <div class="topbar-right">
+      <span class="user-count" id="userCountLabel"></span>
+      <button class="btn-signout" id="logoutBtn">Sign out</button>
+    </div>
+  </div>
+
+  <div class="page">
+
+    <!-- Deploy warning -->
+    <div class="deploy-banner">
+      <div class="deploy-banner-text">
+        <strong>Heads up:</strong> Changes are live immediately but will be lost on the next Railway deploy.
+        Download <code>users.json</code> and commit it to GitHub to make them permanent.
+      </div>
+      <button class="btn-download" id="exportBtn">↓ Download users.json</button>
+    </div>
+
+    <!-- Add user -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Add User</span>
+      </div>
+      <div class="card-body">
+        <div class="add-form">
+          <div class="add-field">
+            <label for="newEmail">Email *</label>
+            <input id="newEmail" type="email" placeholder="jane@company.com"/>
+          </div>
+          <div class="add-field">
+            <label for="newName">Name</label>
+            <input id="newName" type="text" placeholder="Jane Doe"/>
+          </div>
+          <button class="btn-add" id="addUserBtn">Generate Key & Add</button>
+        </div>
+        <div class="add-error" id="addError"></div>
+      </div>
+    </div>
+
+    <!-- New key reveal -->
+    <div class="new-key-banner" id="newKeyBanner">
+      <div class="new-key-top">✅ User added — share this key with them</div>
+      <div class="new-key-row">
+        <span class="new-key-value" id="newKeyValue"></span>
+        <button class="btn-copy" id="copyKeyBtn">Copy</button>
+        <span class="copy-confirm" id="copyConfirm">Copied!</span>
+      </div>
+      <div class="new-key-meta" id="newKeyMeta"></div>
+    </div>
+
+    <!-- Users table -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Active Users</span>
+        <span class="user-count-label" id="tableCountLabel"></span>
+      </div>
+      <div class="card-body" style="padding:0;">
+        <table>
+          <thead>
+            <tr>
+              <th>Key</th>
+              <th>Name</th>
+              <th>Email</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="usersBody"></tbody>
+        </table>
+        <div class="empty-users" id="emptyUsers" style="display:none;">
+          No users yet. Add one above.
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══════════════ CONFIRM MODAL ══════════════ -->
+<div class="modal-overlay" id="confirmModal">
+  <div class="modal">
+    <div class="modal-title">Revoke access?</div>
+    <div class="modal-body" id="confirmBody"></div>
+    <div class="modal-btns">
+      <button class="btn-cancel" id="cancelRevokeBtn">Cancel</button>
+      <button class="btn-confirm-revoke" id="confirmRevokeBtn">Revoke Key</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── State ────────────────────────────────────────────────────────────────────────
+let _pendingRevokeKey = null;
+
+// ── Login ────────────────────────────────────────────────────────────────────────
+async function login() {
+  const pwd = document.getElementById("passwordInput").value;
+  const err = document.getElementById("loginError");
+  err.textContent = "";
+  try {
+    const res  = await fetch("/admin/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: pwd }),
+    });
+    const data = await res.json();
+    if (!data.ok) { err.textContent = data.error || "Login failed"; return; }
+    showAdmin();
+  } catch(e) { err.textContent = "Connection error"; }
+}
+
+document.getElementById("loginBtn").addEventListener("click", login);
+document.getElementById("passwordInput").addEventListener("keydown", e => {
+  if (e.key === "Enter") login();
+});
+
+// ── Show admin UI ────────────────────────────────────────────────────────────────
+function showAdmin() {
+  document.getElementById("loginView").style.display = "none";
+  document.getElementById("adminView").style.display = "block";
+  loadUsers();
+}
+
+// ── Logout ───────────────────────────────────────────────────────────────────────
+document.getElementById("logoutBtn").addEventListener("click", async () => {
+  await fetch("/admin/logout", { method: "POST" });
+  location.reload();
+});
+
+// ── Load & render users ──────────────────────────────────────────────────────────
+async function loadUsers() {
+  try {
+    const res  = await fetch("/admin/users");
+    if (res.status === 401) { location.reload(); return; }
+    const data = await res.json();
+    renderUsers(data.users || {});
+  } catch(e) { console.error("Failed to load users", e); }
+}
+
+function renderUsers(users) {
+  const tbody  = document.getElementById("usersBody");
+  const empty  = document.getElementById("emptyUsers");
+  const count  = Object.keys(users).length;
+  document.getElementById("userCountLabel").textContent  = `${count} active user${count !== 1 ? "s" : ""}`;
+  document.getElementById("tableCountLabel").textContent = `${count} user${count !== 1 ? "s" : ""}`;
+
+  if (count === 0) {
+    tbody.innerHTML = "";
+    empty.style.display = "block";
+    return;
+  }
+  empty.style.display = "none";
+  tbody.innerHTML = Object.entries(users).map(([key, u]) => `
+    <tr>
+      <td class="key-cell">${key}</td>
+      <td class="name-cell">${esc(u.name)}</td>
+      <td class="email-cell">${esc(u.email)}</td>
+      <td style="text-align:right;">
+        <button class="btn-revoke" onclick="promptRevoke('${key}','${esc(u.name)}','${esc(u.email)}')">
+          Revoke
+        </button>
+      </td>
+    </tr>
+  `).join("");
+}
+
+function esc(s) {
+  return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+                  .replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+}
+
+// ── Add user ─────────────────────────────────────────────────────────────────────
+document.getElementById("addUserBtn").addEventListener("click", async () => {
+  const email = document.getElementById("newEmail").value.trim();
+  const name  = document.getElementById("newName").value.trim();
+  const err   = document.getElementById("addError");
+  const btn   = document.getElementById("addUserBtn");
+  err.textContent = "";
+  if (!email) { err.textContent = "Email is required"; return; }
+
+  btn.disabled = true;
+  btn.textContent = "Adding…";
+  try {
+    const res  = await fetch("/admin/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, name }),
+    });
+    const data = await res.json();
+    if (!data.ok) { err.textContent = data.error; return; }
+
+    // Show key banner
+    document.getElementById("newKeyValue").textContent = data.key;
+    document.getElementById("newKeyMeta").textContent  =
+      `${data.user.name} · ${data.user.email}`;
+    const banner = document.getElementById("newKeyBanner");
+    banner.className = "new-key-banner on";
+    banner.scrollIntoView({ behavior: "smooth", block: "nearest" });
+
+    // Clear form
+    document.getElementById("newEmail").value = "";
+    document.getElementById("newName").value  = "";
+    document.getElementById("copyConfirm").className = "copy-confirm";
+
+    loadUsers();
+  } catch(e) { err.textContent = "Request failed"; }
+  finally { btn.disabled = false; btn.textContent = "Generate Key & Add"; }
+});
+
+// ── Copy key ─────────────────────────────────────────────────────────────────────
+document.getElementById("copyKeyBtn").addEventListener("click", () => {
+  const key = document.getElementById("newKeyValue").textContent;
+  navigator.clipboard.writeText(key).then(() => {
+    const c = document.getElementById("copyConfirm");
+    c.className = "copy-confirm on";
+    setTimeout(() => c.className = "copy-confirm", 2000);
+  });
+});
+
+// ── Revoke ───────────────────────────────────────────────────────────────────────
+function promptRevoke(key, name, email) {
+  _pendingRevokeKey = key;
+  document.getElementById("confirmBody").innerHTML =
+    `This will immediately revoke access for <strong>${esc(name)}</strong> (${esc(email)}).<br/>
+     <br/>Key: <span class="modal-key">${esc(key)}</span>`;
+  document.getElementById("confirmModal").className = "modal-overlay on";
+}
+
+document.getElementById("cancelRevokeBtn").addEventListener("click", () => {
+  document.getElementById("confirmModal").className = "modal-overlay";
+  _pendingRevokeKey = null;
+});
+
+document.getElementById("confirmRevokeBtn").addEventListener("click", async () => {
+  if (!_pendingRevokeKey) return;
+  const key = _pendingRevokeKey;
+  document.getElementById("confirmModal").className = "modal-overlay";
+  _pendingRevokeKey = null;
+  try {
+    const res  = await fetch(`/admin/users/${encodeURIComponent(key)}`, { method: "DELETE" });
+    const data = await res.json();
+    if (!data.ok) { alert(data.error); return; }
+    // Hide new key banner if it was showing that key
+    if (document.getElementById("newKeyValue").textContent === key) {
+      document.getElementById("newKeyBanner").className = "new-key-banner";
+    }
+    loadUsers();
+  } catch(e) { alert("Failed to revoke key"); }
+});
+
+// ── Export users.json ─────────────────────────────────────────────────────────────
+document.getElementById("exportBtn").addEventListener("click", () => {
+  window.location.href = "/admin/users/export";
+});
+
+// ── Init: check if already authenticated ─────────────────────────────────────────
+(async () => {
+  try {
+    const res = await fetch("/admin/users");
+    if (res.ok) { showAdmin(); }
+    // else stay on login
+  } catch(e) { /* stay on login */ }
+})();
+</script>
+</body>
+</html>

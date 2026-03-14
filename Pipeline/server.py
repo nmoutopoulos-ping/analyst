@@ -20,17 +20,19 @@ Railway / external hosting:
     Server binds to 0.0.0.0 so it's reachable externally.
 """
 
+import functools
 import json
 import logging
 import os
 import random
+import secrets
 import string
 import sys
 from datetime import datetime
 from pathlib import Path
 from threading import Lock, Thread
 
-from flask import Flask, jsonify, make_response, request, send_from_directory
+from flask import Flask, jsonify, make_response, request, send_from_directory, session
 
 sys.path.insert(0, __file__.rsplit("/", 1)[0])  # ensure Pipeline dir is on path
 from main import run_pipeline_from_payload
@@ -47,11 +49,21 @@ def _load_users() -> dict:
         print(f"[WARN] Could not load users.json: {e}", file=sys.stderr)
         return {}
 
+def _save_users(users: dict) -> None:
+    """Persist the in-memory USERS dict back to users.json."""
+    _USERS_FILE.write_text(json.dumps(users, indent=2) + "\n")
+
+def _gen_api_key() -> str:
+    chars = string.ascii_uppercase + string.digits
+    seg = lambda n: "".join(secrets.choice(chars) for _ in range(n))
+    return f"PING-{seg(4)}-{seg(4)}"
+
 USERS: dict = _load_users()
 
 # ── Setup ───────────────────────────────────────────────────────────────────────
-app   = Flask(__name__)
-_lock = Lock()
+app            = Flask(__name__)
+app.secret_key = os.environ.get("SECRET_KEY", "ping-dev-secret-change-in-prod")
+_lock          = Lock()
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -67,7 +79,7 @@ logging.getLogger("werkzeug").setLevel(logging.WARNING)
 @app.after_request
 def add_cors(response):
     response.headers["Access-Control-Allow-Origin"]  = "*"
-    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PATCH, OPTIONS"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PATCH, DELETE, OPTIONS"
     response.headers["Access-Control-Allow-Headers"] = "Content-Type"
     return response
 
@@ -233,6 +245,93 @@ def deal_download(search_id, filename):
             if target.exists():
                 return send_from_directory(str(job_dir), safe_name, as_attachment=True)
     return jsonify({"ok": False, "error": "File not found"}), 404
+
+
+# ── Admin ────────────────────────────────────────────────────────────────────────
+def _admin_auth(f):
+    """Decorator: require active admin session, else return 401."""
+    @functools.wraps(f)
+    def wrapper(*args, **kwargs):
+        if not session.get("ping_admin"):
+            return jsonify({"ok": False, "error": "Not authenticated"}), 401
+        return f(*args, **kwargs)
+    return wrapper
+
+
+@app.route("/admin")
+@app.route("/admin/")
+def admin_app():
+    admin_path = Path(__file__).parent / "admin.html"
+    if admin_path.exists():
+        return admin_path.read_text(), 200, {"Content-Type": "text/html; charset=utf-8"}
+    return "Admin not found", 404
+
+
+@app.route("/admin/login", methods=["POST"])
+def admin_login():
+    data     = request.get_json(force=True, silent=True) or {}
+    password = data.get("password", "")
+    admin_pw = os.environ.get("ADMIN_PASSWORD", "")
+    if not admin_pw:
+        return jsonify({"ok": False, "error": "ADMIN_PASSWORD env var not set"}), 503
+    if password != admin_pw:
+        log.warning("Admin login failed")
+        return jsonify({"ok": False, "error": "Incorrect password"}), 401
+    session["ping_admin"] = True
+    log.info("Admin login successful")
+    return jsonify({"ok": True}), 200
+
+
+@app.route("/admin/logout", methods=["POST"])
+def admin_logout():
+    session.pop("ping_admin", None)
+    return jsonify({"ok": True}), 200
+
+
+@app.route("/admin/users", methods=["GET"])
+@_admin_auth
+def admin_list_users():
+    return jsonify({"ok": True, "users": USERS}), 200
+
+
+@app.route("/admin/users", methods=["POST"])
+@_admin_auth
+def admin_add_user():
+    data  = request.get_json(force=True, silent=True) or {}
+    email = data.get("email", "").strip()
+    name  = data.get("name", "").strip() or email.split("@")[0]
+    if not email:
+        return jsonify({"ok": False, "error": "Email is required"}), 400
+    # Duplicate email guard
+    for k, u in USERS.items():
+        if u["email"].lower() == email.lower():
+            return jsonify({"ok": False, "error": f"Email already registered (key: {k})"}), 409
+    key = _gen_api_key()
+    USERS[key] = {"email": email, "name": name}
+    _save_users(USERS)
+    log.info(f"Admin: added user {name} <{email}> → {key}")
+    return jsonify({"ok": True, "key": key, "user": USERS[key]}), 201
+
+
+@app.route("/admin/users/<key>", methods=["DELETE"])
+@_admin_auth
+def admin_remove_user(key):
+    if key not in USERS:
+        return jsonify({"ok": False, "error": "Key not found"}), 404
+    user = USERS.pop(key)
+    _save_users(USERS)
+    log.info(f"Admin: removed user {user['name']} <{user['email']}> key={key}")
+    return jsonify({"ok": True, "removed": user}), 200
+
+
+@app.route("/admin/users/export", methods=["GET"])
+@_admin_auth
+def admin_export_users():
+    """Return users.json content for download / commit to GitHub."""
+    return json.dumps(USERS, indent=2) + "\n", 200, {
+        "Content-Type": "application/json",
+        "Content-Disposition": "attachment; filename=users.json",
+    }
 
 
 # ── Entry point ──────────────────────────────────────────────────────────────────
