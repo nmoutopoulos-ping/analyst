@@ -1172,7 +1172,7 @@ async function loadAssumptions() {
 
 async function saveAssumptions() {
   const apiKey = LS.get("apiKey");
-  if (!apiKey) { alert("Save your access key first."); return; }
+  if (!apiKey) return; // unreachable when signed in, guard only
   const payload = { api_key: apiKey };
   for (const k of _ASSUMP_PCT_KEYS) {
     const v = parseFloat(document.getElementById("a_" + k)?.value);
@@ -1270,11 +1270,7 @@ async function attemptLogin() {
 
 function signOut() {
   LS.del("apiKey"); LS.del("profile");
-  showLogin();
-  // Reset login form
-  document.getElementById("loginEmail").value = "";
-  document.getElementById("loginKey").value   = "";
-  document.getElementById("loginError").className = "login-error";
+  location.reload(); // full reload resets all state cleanly
 }
 
 document.getElementById("loginBtn").addEventListener("click", attemptLogin);

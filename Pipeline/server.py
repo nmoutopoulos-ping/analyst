@@ -83,10 +83,11 @@ def add_cors(response):
     response.headers["Access-Control-Allow-Headers"] = "Content-Type"
     return response
 
-@app.route("/trigger",  methods=["OPTIONS"])
-@app.route("/health",   methods=["OPTIONS"])
-@app.route("/deals",    methods=["OPTIONS"])
-@app.route("/settings", methods=["OPTIONS"])
+@app.route("/trigger",    methods=["OPTIONS"])
+@app.route("/health",     methods=["OPTIONS"])
+@app.route("/deals",      methods=["OPTIONS"])
+@app.route("/settings",   methods=["OPTIONS"])
+@app.route("/crm/login",  methods=["OPTIONS"])
 def preflight():
     return make_response("", 204)
 

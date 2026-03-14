@@ -134,7 +134,6 @@ def _run_search(search_id: str, search_meta: dict,
     send_email(search_meta["email"], subject, email_body, [output_fn, summary_fn])
 
     # 6. Write deal metadata for CRM
-    import json as _json
     meta = {
         "searchId":    search_id,
         "address":     search_meta["address"],
@@ -154,7 +153,7 @@ def _run_search(search_id: str, search_meta: dict,
             "docx":  summary_fn.name if summary_fn else "",
         },
     }
-    (job_dir / "meta.json").write_text(_json.dumps(meta, indent=2))
+    (job_dir / "meta.json").write_text(json.dumps(meta, indent=2))
 
     # 7. Mark done
     processed = load_processed()

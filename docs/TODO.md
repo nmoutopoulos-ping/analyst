@@ -79,9 +79,8 @@ Outstanding work, known issues, and planned improvements.
 - **Fix:** Capture Resend errors, include failure reason in `meta.json`, surface it in the CRM deal detail.
 
 ### keygen — Self-Service Onboarding
-- **Status:** Admin-only (manual key generation + redeploy required)
-- **Issue:** Adding a new user requires running `keygen.py`, editing `users.py`, and pushing + redeploying.
-- **Fix:** Long-term: move user registry to a database. API key generation becomes an API call, no redeploy needed.
+- **Status:** Significantly improved — `keygen.py add/remove/list` + admin panel at `/admin`
+- **Remaining:** Long-term, move user registry to a database so key changes survive redeploys without a git commit.
 
 ---
 
@@ -90,13 +89,21 @@ Outstanding work, known issues, and planned improvements.
 - [x] Remove Google Sheets / GAS dependency from submission flow
 - [x] Switch email from Gmail SMTP to Resend HTTP API (Railway blocks SMTP ports)
 - [x] Implement API key authentication (`PING-XXXX-XXXX` format)
-- [x] Build `keygen.py` for new user onboarding
+- [x] Build `keygen.py` with `add`, `remove`, `list` commands operating on `users.json`
+- [x] Replace `users.py` Python dict with `users.json` — editable on GitHub directly
+- [x] Build `/admin` panel — web UI to add/revoke users and download `users.json`
 - [x] Fix `NameError: unit_cnts` in `docx_writer.py`
 - [x] Fix `UnboundLocalError: _unit_cnts` (variable only assigned in `else` branch)
 - [x] Fix `TypeError: float() argument... NoneType` for null lat/lng
+- [x] Fix path traversal vulnerability in `/deals` download endpoint
 - [x] Build Ping Analyst CRM web app (`crm.html`) at `/app`
+- [x] Add CRM login screen — sign in with email + API key, server cross-validates against `users.json`
 - [x] Add `/deals` API endpoint for CRM Deals tab
 - [x] Add `/deals/<id>/download/<file>` endpoint for file downloads
 - [x] Write `meta.json` per job directory after pipeline completes
+- [x] Centralise underwriting assumptions in `assumptions.py` — single source of truth
+- [x] Per-user assumption overrides via `GET /settings` + `PATCH /settings`
+- [x] Underwriting Assumptions card in CRM Settings tab
 - [x] Update Chrome Extension to use API key instead of email
+- [x] Document zip/settings.xml patch workaround in `docx_writer.py`
 - [x] Write README.md, ARCHITECTURE.md, PRODUCTS.md, TODO.md
