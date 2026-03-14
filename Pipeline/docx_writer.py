@@ -11,9 +11,11 @@ from collections import defaultdict
 from pathlib import Path
 
 from helpers import shorten_address, unit_counts as _unit_counts, parse_num
+from assumptions import DEFAULTS as _ASSUMPTION_DEFAULTS
 
 
-def generate_summary_docx(job_dir, search_meta, comp_summary, all_comp_rows=None):
+def generate_summary_docx(job_dir, search_meta, comp_summary, all_comp_rows=None,
+                           assumptions=None):
     """
     Generate a professional multi-page investment summary as a Word .docx file.
     Page 1: Executive summary — property details, aggregated comp analysis, projected income.
@@ -140,15 +142,16 @@ def generate_summary_docx(job_dir, search_meta, comp_summary, all_comp_rows=None
         )
     gross_annual = gross_monthly * 12
 
-    # ── CoC estimates using template's fixed underwriting assumptions ──────────
-    # These mirror the hardcoded defaults in the Excel template
-    _LTV          = 0.70
-    _CLOSING_PCT  = 0.02
-    _VACANCY      = 0.07
-    _OTHER_INC_MO = 75        # $ / unit / month
-    _OPEX_RATIO   = 0.35      # % of EGI
-    _INT_RATE     = 0.065     # annual (IO in Year 1)
-    _RENT_GROWTH1 = 0.03      # Year-1 rent growth applied by the model
+    # ── CoC estimates using user's underwriting assumptions ────────────────────
+    # Falls back to DEFAULTS if the user hasn't customised any values.
+    _a            = {**_ASSUMPTION_DEFAULTS, **(assumptions or {})}
+    _LTV          = _a["ltv"]
+    _CLOSING_PCT  = _a["closingPct"]
+    _VACANCY      = _a["vacancy"]
+    _OTHER_INC_MO = _a["otherIncMo"]   # $ / unit / month
+    _OPEX_RATIO   = _a["opexRatio"]    # % of EGI
+    _INT_RATE     = _a["intRate"]      # annual (IO in Year 1)
+    _RENT_GROWTH1 = _a["rentGrowth1"]  # Year-1 rent growth applied by the model
 
     _gpr1   = gross_annual * (1 + _RENT_GROWTH1)
     _egi1   = _gpr1 * (1 - _VACANCY) + (_OTHER_INC_MO * (total_units or 1) * 12)
@@ -725,12 +728,26 @@ def generate_summary_docx(job_dir, search_meta, comp_summary, all_comp_rows=None
              size=7.5, color="94A3B8")
 
     # ── Save + patch settings.xml ─────────────────────────────
+    #
+    # WHY THIS EXISTS:
+    #   python-docx generates a <w:zoom> element in word/settings.xml but
+    #   omits the required w:percent attribute.  Word Online and some desktop
+    #   builds treat that as a corrupt document and refuse to open it or show
+    #   a repair warning.
+    #
+    #   python-docx has no public API to write w:zoom correctly, so we patch
+    #   the saved .docx (which is just a ZIP of XML files) directly:
+    #     1. Save normally so python-docx flushes everything to disk.
+    #     2. Open the ZIP, read word/settings.xml.
+    #     3. Add w:percent="100" to any <w:zoom> tag that's missing it.
+    #     4. Rewrite the ZIP in-memory with the patched settings.xml.
+    #
+    #   If python-docx ever gains native zoom support this block can be removed.
+    #
     import zipfile, re as _re
     out_path = job_dir / f"Ping_{search_meta['searchId']}_Summary.docx"
     doc.save(str(out_path))
 
-    # python-docx omits the required w:percent on w:zoom — patch it.
-    _bytes = out_path.read_bytes()
     with zipfile.ZipFile(out_path, "r") as z:
         names = z.namelist()
         if "word/settings.xml" in names:

@@ -609,8 +609,76 @@
     </div>
   </div>
 
+  <!-- Underwriting Assumptions -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 19v-6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2zm0 0V9a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v10m-6 0a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2m0 0V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2z"/></svg>
+        Underwriting Assumptions
+      </span>
+    </div>
+    <div class="card-body">
+      <p style="font-size:13px;color:var(--text-2);margin-bottom:12px;">These values drive the Year-1 pro forma in all analyses. Changes apply to new submissions — past deals are unaffected.</p>
+      <div class="grid-2">
+        <div class="field">
+          <label class="field-label" for="a_ltv">Loan-to-Value (LTV)</label>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <input id="a_ltv" type="number" step="0.1" min="0" max="100" placeholder="70" style="flex:1;"/>
+            <span style="font-size:13px;color:var(--text-2);white-space:nowrap;">%</span>
+          </div>
+        </div>
+        <div class="field">
+          <label class="field-label" for="a_closingPct">Closing Costs</label>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <input id="a_closingPct" type="number" step="0.1" min="0" max="20" placeholder="2" style="flex:1;"/>
+            <span style="font-size:13px;color:var(--text-2);white-space:nowrap;">%</span>
+          </div>
+        </div>
+        <div class="field">
+          <label class="field-label" for="a_vacancy">Vacancy Rate</label>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <input id="a_vacancy" type="number" step="0.1" min="0" max="100" placeholder="7" style="flex:1;"/>
+            <span style="font-size:13px;color:var(--text-2);white-space:nowrap;">%</span>
+          </div>
+        </div>
+        <div class="field">
+          <label class="field-label" for="a_opexRatio">OpEx Ratio (% of EGI)</label>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <input id="a_opexRatio" type="number" step="0.1" min="0" max="100" placeholder="35" style="flex:1;"/>
+            <span style="font-size:13px;color:var(--text-2);white-space:nowrap;">%</span>
+          </div>
+        </div>
+        <div class="field">
+          <label class="field-label" for="a_intRate">Interest Rate (IO, Yr 1)</label>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <input id="a_intRate" type="number" step="0.01" min="0" max="30" placeholder="6.5" style="flex:1;"/>
+            <span style="font-size:13px;color:var(--text-2);white-space:nowrap;">%</span>
+          </div>
+        </div>
+        <div class="field">
+          <label class="field-label" for="a_rentGrowth1">Year-1 Rent Growth</label>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <input id="a_rentGrowth1" type="number" step="0.1" min="0" max="50" placeholder="3" style="flex:1;"/>
+            <span style="font-size:13px;color:var(--text-2);white-space:nowrap;">%</span>
+          </div>
+        </div>
+        <div class="field">
+          <label class="field-label" for="a_otherIncMo">Other Income / Unit / Mo</label>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span style="font-size:13px;color:var(--text-2);white-space:nowrap;">$</span>
+            <input id="a_otherIncMo" type="number" step="1" min="0" placeholder="75" style="flex:1;"/>
+          </div>
+        </div>
+      </div>
+      <div class="settings-save-row" style="margin-top:12px;">
+        <button class="btn-primary btn-sm" id="saveAssumptionsBtn">Save Assumptions</button>
+        <span class="settings-saved" id="assumptionsSaved">✓ Saved</span>
+      </div>
+    </div>
+  </div>
+
   <div class="settings-save-row">
-    <button class="btn-primary" id="saveSettingsBtn">Save Settings</button>
+    <button class="btn-primary" id="saveSettingsBtn">Save Profile</button>
     <span class="settings-saved" id="settingsSaved">✓ Saved</span>
   </div>
 </div>
@@ -645,7 +713,8 @@ function switchView(id) {
   document.querySelectorAll(".nav-tab").forEach(t => t.classList.remove("active"));
   document.getElementById(id).classList.add("active");
   document.querySelector(`[data-view="${id}"]`).classList.add("active");
-  if (id === "viewDeals") loadDeals();
+  if (id === "viewDeals")    loadDeals();
+  if (id === "viewSettings") loadAssumptions();
 }
 
 // ── USD formatting ──────────────────────────────────────────────────────────────
@@ -992,6 +1061,52 @@ function updateDealStage(searchId, stage){
   // Note: in MVP, stage is stored client-side only. Server-side persistence comes in a future update.
 }
 
+// ── Underwriting Assumptions ────────────────────────────────────────────────────
+// Pct keys are stored as decimals (0.07) but shown as percentages (7.0)
+const _ASSUMP_PCT_KEYS = ["ltv","closingPct","vacancy","opexRatio","intRate","rentGrowth1"];
+
+async function loadAssumptions() {
+  const apiKey = LS.get("apiKey");
+  if (!apiKey) return;
+  try {
+    const res  = await fetch(`/settings?api_key=${encodeURIComponent(apiKey)}`);
+    const data = await res.json();
+    if (!data.ok || !data.assumptions) return;
+    const a = data.assumptions;
+    for (const k of _ASSUMP_PCT_KEYS) {
+      const el = document.getElementById("a_" + k);
+      if (el && a[k] != null) el.value = parseFloat((a[k] * 100).toFixed(4));
+    }
+    const otherEl = document.getElementById("a_otherIncMo");
+    if (otherEl && a.otherIncMo != null) otherEl.value = a.otherIncMo;
+  } catch(e) { console.warn("Could not load assumptions:", e); }
+}
+
+async function saveAssumptions() {
+  const apiKey = LS.get("apiKey");
+  if (!apiKey) { alert("Save your access key first."); return; }
+  const payload = { api_key: apiKey };
+  for (const k of _ASSUMP_PCT_KEYS) {
+    const v = parseFloat(document.getElementById("a_" + k)?.value);
+    if (!isNaN(v)) payload[k] = v / 100;
+  }
+  const otherV = parseFloat(document.getElementById("a_otherIncMo")?.value);
+  if (!isNaN(otherV)) payload.otherIncMo = otherV;
+  try {
+    const res = await fetch("/settings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    const saved = document.getElementById("assumptionsSaved");
+    saved.className = "settings-saved on";
+    setTimeout(() => saved.className = "settings-saved", 2000);
+  } catch(e) { alert("Failed to save assumptions: " + e.message); }
+}
+
+document.getElementById("saveAssumptionsBtn").addEventListener("click", saveAssumptions);
+
 // ── Settings ────────────────────────────────────────────────────────────────────
 function setKeyConfigured(key){
   document.getElementById("keyUnconfigured").style.display="none";
@@ -1043,6 +1158,7 @@ buildMatrix();
 wireUSDInputs();
 loadForm();
 loadSettings();
+loadAssumptions();
 updateNavUser();
 </script>
 </body>

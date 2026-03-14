@@ -13,6 +13,7 @@ from pathlib import Path
 
 from config import EMAIL_CFG
 from helpers import shorten_address, unit_counts as _unit_counts, parse_num
+from assumptions import DEFAULTS as _ASSUMPTION_DEFAULTS
 
 
 def generate_summary(search_meta, combos, comp_summary):
@@ -57,7 +58,7 @@ def generate_summary(search_meta, combos, comp_summary):
     return "\n".join(lines)
 
 def generate_email_body(search_meta, comp_summary, excel_fn, docx_fn,
-                        commercial_spaces=None):
+                        commercial_spaces=None, assumptions=None):
     """
     Generate a polished plain-text email body for the investment search results.
     """
@@ -93,14 +94,15 @@ def generate_email_body(search_meta, comp_summary, excel_fn, docx_fn,
 
     total_annual  = gross_annual + comm_annual   # residential + commercial
 
-    # ── Year-1 pro forma (same assumptions as docx_writer / model template) ──
-    _LTV          = 0.70
-    _CLOSING_PCT  = 0.02
-    _VACANCY      = 0.07
-    _OTHER_INC_MO = 75
-    _OPEX_RATIO   = 0.35
-    _INT_RATE     = 0.065
-    _RENT_GROWTH1 = 0.03
+    # ── Year-1 pro forma — use user's saved assumptions (fall back to defaults) ──
+    _a            = {**_ASSUMPTION_DEFAULTS, **(assumptions or {})}
+    _LTV          = _a["ltv"]
+    _CLOSING_PCT  = _a["closingPct"]
+    _VACANCY      = _a["vacancy"]
+    _OTHER_INC_MO = _a["otherIncMo"]
+    _OPEX_RATIO   = _a["opexRatio"]
+    _INT_RATE     = _a["intRate"]
+    _RENT_GROWTH1 = _a["rentGrowth1"]
 
     _gpr1      = total_annual * (1 + _RENT_GROWTH1)
     _vac_loss  = _gpr1 * _VACANCY

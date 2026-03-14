@@ -35,6 +35,7 @@ from flask import Flask, jsonify, make_response, request, send_from_directory
 sys.path.insert(0, __file__.rsplit("/", 1)[0])  # ensure Pipeline dir is on path
 from main import run_pipeline_from_payload
 from users import USERS
+import assumptions
 
 # ── Setup ───────────────────────────────────────────────────────────────────────
 app   = Flask(__name__)
@@ -54,13 +55,14 @@ logging.getLogger("werkzeug").setLevel(logging.WARNING)
 @app.after_request
 def add_cors(response):
     response.headers["Access-Control-Allow-Origin"]  = "*"
-    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PATCH, OPTIONS"
     response.headers["Access-Control-Allow-Headers"] = "Content-Type"
     return response
 
-@app.route("/trigger", methods=["OPTIONS"])
-@app.route("/health",  methods=["OPTIONS"])
-@app.route("/deals",   methods=["OPTIONS"])
+@app.route("/trigger",  methods=["OPTIONS"])
+@app.route("/health",   methods=["OPTIONS"])
+@app.route("/deals",    methods=["OPTIONS"])
+@app.route("/settings", methods=["OPTIONS"])
 def preflight():
     return make_response("", 204)
 
@@ -93,6 +95,9 @@ def trigger():
     # Resolve email from key — user cannot spoof this
     email = user["email"]
     payload["email"] = email
+
+    # Attach the user's saved underwriting assumptions to the payload
+    payload["assumptions"] = assumptions.load(api_key)
 
     # Validate required fields
     if not payload.get("address"):
@@ -128,6 +133,29 @@ def trigger():
 def health():
     status = "busy" if _lock.locked() else "idle"
     return jsonify({"ok": True, "status": status}), 200
+
+
+# ── Settings API ─────────────────────────────────────────────────────────────────
+@app.route("/settings", methods=["GET"])
+def get_settings():
+    """Return the user's current underwriting assumptions."""
+    api_key = request.headers.get("X-Api-Key") or request.args.get("api_key", "")
+    if not api_key or api_key not in USERS:
+        return jsonify({"ok": False, "error": "Unauthorized"}), 403
+    return jsonify({"ok": True, "assumptions": assumptions.load(api_key)}), 200
+
+
+@app.route("/settings", methods=["PATCH"])
+def patch_settings():
+    """Update one or more underwriting assumptions for the authenticated user."""
+    data    = request.get_json(force=True, silent=True) or {}
+    api_key = (data.get("api_key") or "").strip() or \
+              (request.headers.get("X-Api-Key") or "").strip()
+    if not api_key or api_key not in USERS:
+        return jsonify({"ok": False, "error": "Unauthorized"}), 403
+    merged = assumptions.save(api_key, data)
+    log.info(f"Settings updated for {USERS[api_key]['name']}")
+    return jsonify({"ok": True, "assumptions": merged}), 200
 
 
 # ── CRM app ───────────────────────────────────────────────────────────────────────
@@ -178,17 +206,20 @@ def deal_download(search_id, filename):
     if not api_key or api_key not in USERS:
         return jsonify({"ok": False, "error": "Unauthorized"}), 403
 
-    # Safety: only allow known file extensions
-    if not (filename.endswith(".xlsx") or filename.endswith(".docx")):
+    # Strip any directory components to prevent path traversal attacks
+    safe_name = Path(filename).name
+
+    # Only allow known file extensions
+    if not (safe_name.endswith(".xlsx") or safe_name.endswith(".docx")):
         return jsonify({"ok": False, "error": "Invalid file type"}), 400
 
     output_dir = _get_output_dir()
     # Find the job directory that starts with this search_id
     for job_dir in output_dir.iterdir():
         if job_dir.is_dir() and job_dir.name.startswith(search_id):
-            target = job_dir / filename
+            target = job_dir / safe_name
             if target.exists():
-                return send_from_directory(str(job_dir), filename, as_attachment=True)
+                return send_from_directory(str(job_dir), safe_name, as_attachment=True)
     return jsonify({"ok": False, "error": "File not found"}), 404
 
 

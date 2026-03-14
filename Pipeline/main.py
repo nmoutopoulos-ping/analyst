@@ -38,8 +38,10 @@ from emailer import generate_summary, generate_email_body, send_email
 # ── Shared pipeline core ────────────────────────────────────────────────────────
 
 def _run_search(search_id: str, search_meta: dict,
-                combos: list, commercial_spaces: list) -> None:
+                combos: list, commercial_spaces: list,
+                assump: dict | None = None) -> None:
     """Steps 2-6 for a single search. Used by both entry points."""
+    assump = assump or {}
 
     # 2. Fetch RentCast comps (parallel across combos)
     print(f"  [2] Fetching RentCast comps for {len(combos)} combo(s) in parallel...")
@@ -114,7 +116,9 @@ def _run_search(search_id: str, search_meta: dict,
 
     # 4. Generate Word summary
     print(f"  [4] Generating Word summary...")
-    summary_fn = generate_summary_docx(job_dir, search_meta, comp_summary, all_comp_rows)
+    summary_fn = generate_summary_docx(
+        job_dir, search_meta, comp_summary, all_comp_rows, assumptions=assump,
+    )
     print()
     print(generate_summary(search_meta, combos, comp_summary))
     print()
@@ -125,6 +129,7 @@ def _run_search(search_id: str, search_meta: dict,
     email_body = generate_email_body(
         search_meta, comp_summary, output_fn, summary_fn,
         commercial_spaces=commercial_spaces,
+        assumptions=assump,
     )
     send_email(search_meta["email"], subject, email_body, [output_fn, summary_fn])
 
@@ -173,6 +178,7 @@ def run_pipeline_from_payload(payload: dict) -> None:
     search_id         = payload.get("searchId", f"SRCH-{datetime.now().strftime('%Y%m%d')}-ADHOC")
     combos            = payload.get("combos", [])
     commercial_spaces = payload.get("commercial") or []
+    assump            = payload.get("assumptions") or {}
 
     print(f"\n[Search] {search_id}")
 
@@ -197,7 +203,7 @@ def run_pipeline_from_payload(payload: dict) -> None:
             "cost":       payload.get("cost", ""),
             "sqft":       payload.get("sqft", ""),
         }
-        _run_search(search_id, search_meta, combos, commercial_spaces)
+        _run_search(search_id, search_meta, combos, commercial_spaces, assump=assump)
 
     except Exception as e:
         print(f"  \u274c  Error in {search_id}: {e}")
