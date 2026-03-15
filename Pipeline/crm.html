@@ -1068,21 +1068,21 @@ async function loadDeals() {
 }
 function filterDeals(){
   const q=document.getElementById("dealsSearch").value.toLowerCase();
-  renderDealsTable(allDeals.filter(d=>(d.address||"").toLowerCase().includes(q)||(d.searchId||"").toLowerCase().includes(q)));
+  renderDealsTable(allDeals.filter(d=>(d.address||"").toLowerCase().includes(q)||(d.search_id||"").toLowerCase().includes(q)));
 }
 const STAGE_ORDER=["New","Review","Offer","Contract","Closed","Pass"];
 function renderDealsTable(deals){
   const wrap=document.getElementById("dealsTableWrap");
   if(!deals.length){wrap.innerHTML='<div class="empty-deals"><div class="empty-deals-icon">📋</div><div class="empty-deals-title">No deals yet</div><div class="empty-deals-sub">Submitted analyses will appear here once the pipeline completes.</div></div>';return;}
   const rows=deals.map(d=>{
-    const dt=new Date(d.timestamp);
+    const dt=new Date(d.created_at);
     const date=dt.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"});
-    const stage=d.dealStage||"New";
-    const units=d.totalUnits||"—";
+    const stage=d.deal_stage||"New";
+    const units=d.total_units||"—";
     const price=d.price?`$${Number(d.price).toLocaleString()}`:"—";
-    return `<tr onclick="openDeal('${d.searchId}')">
-      <td><span class="deal-id">${d.searchId}</span></td>
-      <td><div class="deal-addr">${d.shortAddress||d.address||"—"}</div><div class="deal-meta">${date}</div></td>
+    return `<tr onclick="openDeal('${d.search_id}')">
+      <td><span class="deal-id">${d.search_id}</span></td>
+      <td><div class="deal-addr">${d.short_address||d.address||"—"}</div><div class="deal-meta">${date}</div></td>
       <td>${units} units</td>
       <td>${price}</td>
       <td><span class="stage-badge stage-${stage}">${stage}</span></td>
@@ -1091,17 +1091,17 @@ function renderDealsTable(deals){
   wrap.innerHTML=`<table class="deals-table"><thead><tr><th>Search ID</th><th>Property</th><th>Units</th><th>Price</th><th>Stage</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 function openDeal(searchId){
-  const deal=allDeals.find(d=>d.searchId===searchId); if(!deal)return;
+  const deal=allDeals.find(d=>d.search_id===searchId); if(!deal)return;
   const apiKey=LS.get("apiKey")||"";
-  document.getElementById("modalTitle").textContent=deal.shortAddress||deal.address||searchId;
+  document.getElementById("modalTitle").textContent=deal.short_address||deal.address||searchId;
   document.getElementById("modalSub").textContent=searchId;
 
   const price=deal.price?`$${Number(deal.price).toLocaleString()}`:"—";
   const cost=deal.cost?`$${Number(deal.cost).toLocaleString()}`:"—";
   const sqft=deal.sqft?`${Number(deal.sqft).toLocaleString()} sqft`:"—";
-  const dt=new Date(deal.timestamp).toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"});
+  const dt=new Date(deal.created_at).toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"});
 
-  const compRows=(deal.compSummary||[]).map(c=>`
+  const compRows=(deal.comp_summary||[]).map(c=>`
     <div class="comp-row">
       <span class="comp-label">${c.beds}BD/${c.baths}BA · ${c.units||"—"} units</span>
       <div class="comp-stats">
@@ -1111,17 +1111,17 @@ function openDeal(searchId){
       </div>
     </div>`).join("");
 
-  const stageOpts=STAGE_ORDER.map(s=>`<option value="${s}"${s===(deal.dealStage||"New")?" selected":""}>${s}</option>`).join("");
+  const stageOpts=STAGE_ORDER.map(s=>`<option value="${s}"${s===(deal.deal_stage||"New")?" selected":""}>${s}</option>`).join("");
 
-  const excelBtn=deal.files?.excel?`<a class="btn-download excel" href="/deals/${searchId}/download/${deal.files.excel}?api_key=${encodeURIComponent(apiKey)}" download><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Excel Model</a>`:"";
-  const docxBtn=deal.files?.docx?`<a class="btn-download word" href="/deals/${searchId}/download/${deal.files.docx}?api_key=${encodeURIComponent(apiKey)}" download><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Word Summary</a>`:"";
+  const excelBtn=deal.excel_path?`<a class="btn-download excel" href="/deals/${searchId}/download/excel?api_key=${encodeURIComponent(apiKey)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Excel Model</a>`:"";
+  const docxBtn=deal.docx_path?`<a class="btn-download word" href="/deals/${searchId}/download/docx?api_key=${encodeURIComponent(apiKey)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Word Summary</a>`:"";
 
   document.getElementById("modalBody").innerHTML=`
     <div>
       <div class="modal-section-title">Property Details</div>
       <div class="detail-grid">
         <div class="detail-item"><div class="detail-item-label">Date</div><div class="detail-item-val">${dt}</div></div>
-        <div class="detail-item"><div class="detail-item-label">Total Units</div><div class="detail-item-val">${deal.totalUnits||"—"}</div></div>
+        <div class="detail-item"><div class="detail-item-label">Total Units</div><div class="detail-item-val">${deal.total_units||"—"}</div></div>
         <div class="detail-item"><div class="detail-item-label">Price</div><div class="detail-item-val">${price}</div></div>
         <div class="detail-item"><div class="detail-item-label">Improvements</div><div class="detail-item-val">${cost}</div></div>
         <div class="detail-item"><div class="detail-item-label">Building SqFt</div><div class="detail-item-val">${sqft}</div></div>
@@ -1141,12 +1141,18 @@ function openDeal(searchId){
   document.getElementById("dealModal").classList.add("on");
 }
 function closeDealModal(){ document.getElementById("dealModal").classList.remove("on"); }
-function updateDealStage(searchId, stage){
-  const deal=allDeals.find(d=>d.searchId===searchId); if(!deal)return;
-  deal.dealStage=stage;
-  // Update badge in table immediately
+async function updateDealStage(searchId, stage){
+  const deal=allDeals.find(d=>d.search_id===searchId); if(!deal)return;
+  deal.deal_stage=stage;
   renderDealsTable(allDeals);
-  // Note: in MVP, stage is stored client-side only. Server-side persistence comes in a future update.
+  const apiKey=LS.get("apiKey")||"";
+  try {
+    await fetch(`/deals/${searchId}/stage`,{
+      method:"PATCH",
+      headers:{"Content-Type":"application/json","X-Api-Key":apiKey},
+      body:JSON.stringify({stage})
+    });
+  } catch(e){ console.warn("Stage save failed:",e); }
 }
 
 // ── Underwriting Assumptions ────────────────────────────────────────────────────
