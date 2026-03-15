@@ -1,21 +1,15 @@
 {
-  "gas_url": "https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec",
-
-  "sheet_id": "YOUR_GOOGLE_SHEET_ID",
-
   "rentcast_api_key": "YOUR_RENTCAST_API_KEY",
   "rentcast_base_url": "https://api.rentcast.io/v1",
 
   "excel_template": "./templates/Multifamily Underwriting Template V1.xlsx",
   "output_dir": "./output",
 
+  "SUPABASE_URL": "https://your-project-ref.supabase.co",
+  "SUPABASE_SERVICE_KEY": "YOUR_SUPABASE_SERVICE_ROLE_KEY",
+
   "email": {
-    "enabled": true,
-    "sender": "analyst@yourdomain.org",
-    "smtp_user": "you@yourdomain.org",
-    "app_password": "YOUR_GMAIL_APP_PASSWORD",
-    "default_recipient": "you@yourdomain.org",
-    "subject_prefix": "Ping Underwriting Model"
+    "enabled": false
   },
 
   "pipeline": {

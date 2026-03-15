@@ -7,7 +7,7 @@ Orchestrates the full underwriting pipeline:
   2. Call RentCast API for rental comps per unit-mix combo (parallel)
   3. Populate Excel model (Raw Comps, Assumptions, Inputs)
   4. Generate Word summary (executive + market analysis + comp listings)
-  5. Email .xlsx + .docx to requester
+  5. Upload files to Supabase Storage, insert deal row to database
   6. Mark search processed locally
 
 Entry points:
@@ -19,7 +19,7 @@ import json
 import shutil
 import traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from openpyxl import load_workbook
@@ -32,7 +32,8 @@ from helpers import (
 from fetcher import rentcast_comps, build_comp_rows
 from excel_writer import populate_raw_comps, populate_assumptions, populate_inputs
 from docx_writer import generate_summary_docx
-from emailer import generate_summary, generate_email_body, send_email
+from emailer import generate_summary
+from supabase_client import upload_deal_file, insert_deal
 
 
 # ── Shared pipeline core ────────────────────────────────────────────────────────
@@ -123,37 +124,37 @@ def _run_search(search_id: str, search_meta: dict,
     print(generate_summary(search_meta, combos, comp_summary))
     print()
 
-    # 5. Send email
-    print(f"  [5] Sending email to {search_meta['email']}...")
-    subject    = f"Your Ping analysis is ready \u2014 {short_name}"
-    email_body = generate_email_body(
-        search_meta, comp_summary, output_fn, summary_fn,
-        commercial_spaces=commercial_spaces,
-        assumptions=assump,
-    )
-    send_email(search_meta["email"], subject, email_body, [output_fn, summary_fn])
+    # 5. Upload files to Supabase Storage
+    print(f"  [5] Uploading files to Supabase Storage...")
+    excel_storage_path = upload_deal_file(search_id, output_fn)
+    print(f"         Excel uploaded: {excel_storage_path}")
+    docx_storage_path  = ""
+    if summary_fn and summary_fn.exists():
+        docx_storage_path = upload_deal_file(search_id, summary_fn)
+        print(f"         Word  uploaded: {docx_storage_path}")
 
-    # 6. Write deal metadata for CRM
-    meta = {
-        "searchId":    search_id,
-        "address":     search_meta["address"],
-        "shortAddress": shorten_address(search_meta["address"]),
-        "email":       search_meta["email"],
-        "timestamp":   datetime.now().isoformat(),
-        "price":       search_meta.get("price", ""),
-        "cost":        search_meta.get("cost", ""),
-        "sqft":        search_meta.get("sqft", ""),
-        "totalUnits":  search_meta.get("totalUnits", ""),
-        "radius":      str(search_meta.get("radius", "")),
-        "dealStage":   "New",
-        "combos":      combos,
-        "compSummary": comp_summary,
-        "files": {
-            "excel": output_fn.name,
-            "docx":  summary_fn.name if summary_fn else "",
-        },
+    # 6. Insert deal row into Supabase database
+    print(f"  [6] Saving deal to database...")
+    deal_row = {
+        "search_id":     search_id,
+        "address":       search_meta["address"],
+        "short_address": shorten_address(search_meta["address"]),
+        "email":         search_meta["email"],
+        "api_key":       search_meta.get("api_key", ""),
+        "created_at":    datetime.now(timezone.utc).isoformat(),
+        "price":         search_meta.get("price", ""),
+        "cost":          search_meta.get("cost", ""),
+        "sqft":          search_meta.get("sqft", ""),
+        "total_units":   search_meta.get("totalUnits", ""),
+        "radius":        str(search_meta.get("radius", "")),
+        "deal_stage":    "New",
+        "combos":        combos,
+        "comp_summary":  comp_summary,
+        "excel_path":    excel_storage_path,
+        "docx_path":     docx_storage_path,
+        "status":        "complete",
     }
-    (job_dir / "meta.json").write_text(json.dumps(meta, indent=2))
+    insert_deal(deal_row)
 
     # 7. Mark done
     processed = load_processed()
@@ -190,6 +191,7 @@ def run_pipeline_from_payload(payload: dict) -> None:
         search_meta = {
             "searchId":   search_id,
             "email":      payload.get("email", ""),
+            "api_key":    payload.get("api_key", ""),
             "address":    payload.get("address", ""),
             "lat":        float(payload.get("lat") or 0),
             "lng":        float(payload.get("lng") or 0),

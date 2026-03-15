@@ -32,7 +32,7 @@ from datetime import datetime
 from pathlib import Path
 from threading import Lock, Thread
 
-from flask import Flask, jsonify, make_response, request, send_from_directory, session
+from flask import Flask, jsonify, make_response, redirect, request, session
 
 sys.path.insert(0, __file__.rsplit("/", 1)[0])  # ensure Pipeline dir is on path
 from main import run_pipeline_from_payload
@@ -194,58 +194,70 @@ def crm_app():
 
 
 # ── Deals API ─────────────────────────────────────────────────────────────────────
-def _get_output_dir():
-    from config import OUTPUT_DIR
-    return OUTPUT_DIR
+from supabase_client import fetch_deals, get_download_url, update_deal_stage
 
 @app.route("/deals", methods=["GET"])
 def deals():
-    """Return list of all completed deals, sorted newest first."""
+    """Return list of all completed deals from Supabase, sorted newest first."""
     api_key = request.headers.get("X-Api-Key") or request.args.get("api_key", "")
     if not api_key or api_key not in USERS:
         return jsonify({"ok": False, "error": "Unauthorized"}), 403
 
     try:
-        output_dir = _get_output_dir()
-        deal_list  = []
-        if output_dir.exists():
-            for job_dir in sorted(output_dir.iterdir(), reverse=True):
-                if not job_dir.is_dir():
-                    continue
-                meta_file = job_dir / "meta.json"
-                if meta_file.exists():
-                    try:
-                        meta = json.loads(meta_file.read_text())
-                        deal_list.append(meta)
-                    except Exception:
-                        pass
+        deal_list = fetch_deals(api_key=api_key)
         return jsonify({"ok": True, "deals": deal_list}), 200
     except Exception as e:
+        log.error(f"Error fetching deals: {e}", exc_info=True)
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
-@app.route("/deals/<search_id>/download/<filename>", methods=["GET"])
-def deal_download(search_id, filename):
-    """Serve a deal file (Excel or Word) for download."""
+@app.route("/deals/<search_id>/download/<file_type>", methods=["GET"])
+def deal_download(search_id, file_type):
+    """Return a signed Supabase Storage URL and redirect to file download."""
     api_key = request.headers.get("X-Api-Key") or request.args.get("api_key", "")
     if not api_key or api_key not in USERS:
         return jsonify({"ok": False, "error": "Unauthorized"}), 403
 
-    # Strip any directory components to prevent path traversal attacks
-    safe_name = Path(filename).name
+    if file_type not in ("excel", "docx"):
+        return jsonify({"ok": False, "error": "Invalid file type. Use 'excel' or 'docx'"}), 400
 
-    # Only allow known file extensions
-    if not (safe_name.endswith(".xlsx") or safe_name.endswith(".docx")):
-        return jsonify({"ok": False, "error": "Invalid file type"}), 400
+    try:
+        deals_data = fetch_deals(api_key=api_key)
+        deal = next((d for d in deals_data if d.get("search_id") == search_id), None)
+        if not deal:
+            return jsonify({"ok": False, "error": "Deal not found"}), 404
 
-    output_dir = _get_output_dir()
-    # Find the job directory that starts with this search_id
-    for job_dir in output_dir.iterdir():
-        if job_dir.is_dir() and job_dir.name.startswith(search_id):
-            target = job_dir / safe_name
-            if target.exists():
-                return send_from_directory(str(job_dir), safe_name, as_attachment=True)
-    return jsonify({"ok": False, "error": "File not found"}), 404
+        storage_path = deal.get("excel_path") if file_type == "excel" else deal.get("docx_path")
+        if not storage_path:
+            return jsonify({"ok": False, "error": "File not available"}), 404
+
+        signed_url = get_download_url(storage_path)
+        return redirect(signed_url)
+    except Exception as e:
+        log.error(f"Error generating download URL: {e}", exc_info=True)
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/deals/<search_id>/stage", methods=["PATCH"])
+def patch_deal_stage(search_id):
+    """Update the deal stage for a given deal (now server-side, not localStorage)."""
+    api_key = request.headers.get("X-Api-Key") or request.args.get("api_key", "")
+    if not api_key or api_key not in USERS:
+        return jsonify({"ok": False, "error": "Unauthorized"}), 403
+
+    data  = request.get_json(force=True, silent=True) or {}
+    stage = data.get("stage", "").strip()
+    valid_stages = {"New", "Review", "Offer", "Contract", "Closed", "Pass"}
+    if stage not in valid_stages:
+        return jsonify({"ok": False, "error": f"Invalid stage. Must be one of: {', '.join(valid_stages)}"}), 400
+
+    try:
+        update_deal_stage(search_id, stage)
+        log.info(f"Deal {search_id} stage → {stage}")
+        return jsonify({"ok": True, "stage": stage}), 200
+    except Exception as e:
+        log.error(f"Error updating deal stage: {e}", exc_info=True)
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 # ── CRM Login ────────────────────────────────────────────────────────────────────
