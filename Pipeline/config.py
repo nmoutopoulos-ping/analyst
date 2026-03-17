@@ -2,20 +2,19 @@
 config.py — Ping Pipeline Configuration
 -----------------------------------------
 Loads config.json if present (local dev) and exposes typed constants used
-across all modules. On Railway/cloud, config.json is absent — all values
+across all modules. On Render, config.json is absent — all values
 must be supplied via environment variables instead.
 All paths are resolved relative to this file's parent directory.
 
-Environment variables (required on Railway, override config.json locally):
+Environment variables (required on Render, override config.json locally):
     RENTCAST_API_KEY  — RentCast API key
-    GAS_URL           — Google Apps Script web app URL
-    SHEET_ID          — Google Sheets spreadsheet ID
+    GAS_URL           — Google Apps Script web app URL (legacy sheet mode only)
+    SHEET_ID          — Google Sheets spreadsheet ID (legacy sheet mode only)
     OUTPUT_DIR        — Output directory path (default: /tmp/ping_output on server)
     EMAIL_ENABLED     — "true"/"false"
-    SMTP_HOST         — SMTP server hostname
-    SMTP_PORT         — SMTP port (default 587)
-    SMTP_USER         — SMTP username
-    SMTP_PASS         — SMTP password
+    RESEND_API_KEY    — Resend API key for email delivery
+    SUPABASE_URL      — Supabase project URL
+    SUPABASE_SERVICE_KEY — Supabase service role key
 """
 
 import json
