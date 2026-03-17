@@ -15,7 +15,7 @@ from assumptions import DEFAULTS as _ASSUMPTION_DEFAULTS
 
 
 def generate_summary_docx(job_dir, search_meta, comp_summary, all_comp_rows=None,
-                           assumptions=None):
+                           assumptions=None, commercial_spaces=None):
     """
     Generate a professional multi-page investment summary as a Word .docx file.
     Page 1: Executive summary — property details, aggregated comp analysis, projected income.
