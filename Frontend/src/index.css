@@ -29,4 +29,7 @@
   .stage-badge {
     @apply inline-block text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap;
   }
+  .form-label {
+    @apply block text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1.5;
+  }
 }
