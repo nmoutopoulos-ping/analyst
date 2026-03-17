@@ -151,6 +151,8 @@ def _run_search(search_id: str, search_meta: dict,
         "deal_stage":    "New",
         "combos":        combos,
         "comp_summary":  comp_summary,
+        "comp_rows":     all_comp_rows,
+        "preset_name":   search_meta.get("preset_name", ""),
         "excel_path":    excel_storage_path,
         "docx_path":     docx_storage_path,
         "status":        "complete",
@@ -201,9 +203,10 @@ def run_pipeline_from_payload(payload: dict) -> None:
             "maxComps":   int(float(payload.get("maxComps") or 20)),
             "status":     payload.get("status", "Active"),
             "totalUnits": str(total_units),
-            "price":      payload.get("price", ""),
-            "cost":       payload.get("cost", ""),
-            "sqft":       payload.get("sqft", ""),
+            "price":       payload.get("price", ""),
+            "cost":        payload.get("cost", ""),
+            "sqft":        payload.get("sqft", ""),
+            "preset_name": payload.get("preset_name", ""),
         }
         _run_search(search_id, search_meta, combos, commercial_spaces, assump=assump)
 
