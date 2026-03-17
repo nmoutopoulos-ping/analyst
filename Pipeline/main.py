@@ -118,7 +118,8 @@ def _run_search(search_id: str, search_meta: dict,
     # 4. Generate Word summary
     print(f"  [4] Generating Word summary...")
     summary_fn = generate_summary_docx(
-        job_dir, search_meta, comp_summary, all_comp_rows, assumptions=assump,
+        job_dir, search_meta, comp_summary, all_comp_rows,
+        assumptions=assump, commercial_spaces=commercial_spaces,
     )
     print()
     print(generate_summary(search_meta, combos, comp_summary))
@@ -128,7 +129,7 @@ def _run_search(search_id: str, search_meta: dict,
     print(f"  [5] Uploading files to Supabase Storage...")
     excel_storage_path = upload_deal_file(search_id, output_fn)
     print(f"         Excel uploaded: {excel_storage_path}")
-    docx_storage_path  = ""
+    docx_storage_path  = None
     if summary_fn and summary_fn.exists():
         docx_storage_path = upload_deal_file(search_id, summary_fn)
         print(f"         Word  uploaded: {docx_storage_path}")
