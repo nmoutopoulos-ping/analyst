@@ -124,8 +124,9 @@ def trigger():
     email = user["email"]
     payload["email"] = email
 
-    # Attach the user's saved underwriting assumptions to the payload
-    payload["assumptions"] = assumptions.load(api_key)
+    # Attach underwriting assumptions: use client-provided preset if present, else load saved user defaults
+    if not payload.get("assumptions"):
+        payload["assumptions"] = assumptions.load(api_key)
 
     # Validate required fields
     if not payload.get("address"):

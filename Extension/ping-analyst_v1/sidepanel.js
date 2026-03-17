@@ -238,6 +238,7 @@ async function loadSettings() {
       if (cfg.commercialToggle) { $("commercialToggle").checked = true; $("commercialPanel").classList.add("on"); renderCommercialPanel(); }
     }
   );
+  loadPresetsStorage(() => renderSearchPresetSelect());
 }
 function getFormVals() {
   return {
@@ -305,6 +306,12 @@ $("runBtn").addEventListener("click", async () => {
   const activeCommercial = $("commercialToggle").checked ? selectedCommercial : [];
   chrome.storage.sync.set({ ...vals, combos: selectedCombos, commercial: selectedCommercial, commercialToggle: $("commercialToggle").checked });
 
+  // Resolve which preset to use for this search
+  const chosenPresetName = $("searchPresetSelect")?.value || searchActivePreset || defaultPresetName;
+  const chosenPreset     = getPreset(chosenPresetName);
+  searchActivePreset     = chosenPresetName;
+  savePresetsStorage();
+
   try {
     const body = {
       api_key:    apiKey,
@@ -320,6 +327,16 @@ $("runBtn").addEventListener("click", async () => {
       status:     vals.status,
       combos:     selectedCombos,
       commercial: activeCommercial,
+      assumptions: {
+        ltv:         chosenPreset.ltv,
+        closingPct:  chosenPreset.closingPct,
+        vacancy:     chosenPreset.vacancy,
+        opexRatio:   chosenPreset.opexRatio,
+        intRate:     chosenPreset.intRate,
+        rentGrowth1: chosenPreset.rentGrowth1,
+        otherIncMo:  chosenPreset.otherIncMo,
+      },
+      preset_name: chosenPresetName,
     };
 
     const res  = await fetch(`${serverUrl}/trigger`, {
@@ -336,6 +353,7 @@ $("runBtn").addEventListener("click", async () => {
       totalUnits,
       combos:     selectedCombos,
       commercial: activeCommercial,
+      presetName: chosenPresetName,
       timestamp:  new Date().toISOString(),
       success:    !!data.ok,
       message:    data.error || (data.ok ? "Analysis started — results will be emailed to you shortly." : "Unknown error"),
@@ -372,6 +390,7 @@ function showResults(entry, vals) {
     ["Radius",        `${vals?.radius || "—"} mi`],
     ["Comps",         `${vals?.minComps || "—"} – ${vals?.maxComps || "—"}`],
     ["Status",        vals?.status || "—"],
+    ["Assumptions",   entry.presetName || "—"],
   ].forEach(([label, value]) => {
     const row = document.createElement("div"); row.className = "detail-row";
     row.innerHTML = `<span class="dl">${label}</span><span class="dv">${value}</span>`;
@@ -422,6 +441,290 @@ function renderHistory() {
     });
   });
 }
+
+// ── Assumption Presets ─────────────────────────────────────────────────────────
+
+const PRESET_FIELD_CONFIG = [
+  { key:"ltv",         label:"Loan-to-Value (LTV)",     step:"1",   min:"1",   max:"100", pct:true  },
+  { key:"closingPct",  label:"Closing Costs",            step:"0.5", min:"0",   max:"20",  pct:true  },
+  { key:"vacancy",     label:"Vacancy Rate",             step:"1",   min:"0",   max:"50",  pct:true  },
+  { key:"opexRatio",   label:"OPEX Ratio",               step:"1",   min:"0",   max:"100", pct:true  },
+  { key:"intRate",     label:"Interest Rate (IO, Yr 1)", step:"0.1", min:"0",   max:"30",  pct:true  },
+  { key:"rentGrowth1", label:"Year-1 Rent Growth",       step:"0.5", min:"-10", max:"20",  pct:true  },
+  { key:"otherIncMo",  label:"Other Income / Unit / Mo", step:"5",   min:"0",   max:"500", pct:false, prefix:"$" },
+];
+
+const SEED_PRESETS = [
+  { name:"Conservative", ltv:0.65, closingPct:0.03,  vacancy:0.10, opexRatio:0.40, intRate:0.07,  rentGrowth1:0.02, otherIncMo:50  },
+  { name:"Standard",     ltv:0.70, closingPct:0.02,  vacancy:0.07, opexRatio:0.35, intRate:0.065, rentGrowth1:0.03, otherIncMo:75  },
+  { name:"Aggressive",   ltv:0.80, closingPct:0.015, vacancy:0.05, opexRatio:0.30, intRate:0.060, rentGrowth1:0.05, otherIncMo:100 },
+];
+
+let assumptionPresets  = [];
+let defaultPresetName  = "";
+let searchActivePreset = "";
+let settingsSelected   = "";   // preset currently highlighted in settings view
+let editingPreset      = null; // null = adding new, string = name of preset being edited
+
+function loadPresetsStorage(cb) {
+  chrome.storage.sync.get(["assumptionPresets","defaultPresetName","searchActivePreset"], cfg => {
+    assumptionPresets  = cfg.assumptionPresets?.length ? cfg.assumptionPresets : SEED_PRESETS.map(p => ({...p}));
+    defaultPresetName  = cfg.defaultPresetName  || assumptionPresets[0]?.name || "";
+    searchActivePreset = cfg.searchActivePreset || defaultPresetName;
+    settingsSelected   = defaultPresetName;
+    if (cb) cb();
+  });
+}
+
+function savePresetsStorage() {
+  chrome.storage.sync.set({ assumptionPresets, defaultPresetName, searchActivePreset });
+}
+
+function getPreset(name) {
+  return assumptionPresets.find(p => p.name === name) || assumptionPresets[0];
+}
+
+function fmtPresetVal(key, val) {
+  const cfg = PRESET_FIELD_CONFIG.find(c => c.key === key);
+  if (!cfg) return String(val);
+  if (cfg.pct) {
+    const pct = val * 100;
+    const decimals = (pct % 1 === 0) ? 0 : (String(pct).split(".")[1]?.length > 1 ? 1 : 1);
+    return pct.toFixed(decimals).replace(/\.0$/, "") + "%";
+  }
+  return "$" + val;
+}
+
+// ── Search preset selector ─────────────────────────────────────────────────────
+
+function renderSearchPresetSelect() {
+  const sel = $("searchPresetSelect");
+  if (!sel) return;
+  const prev = sel.value || searchActivePreset;
+  sel.innerHTML = "";
+  assumptionPresets.forEach(p => {
+    const o = document.createElement("option");
+    o.value = p.name;
+    o.textContent = p.name + (p.name === defaultPresetName ? " (Default)" : "");
+    if (p.name === prev) o.selected = true;
+    sel.appendChild(o);
+  });
+  if (!sel.value && assumptionPresets.length) sel.value = assumptionPresets[0].name;
+}
+
+$("searchPresetSelect").addEventListener("change", function () {
+  searchActivePreset = this.value;
+  savePresetsStorage();
+});
+
+$("openSettingsBtn").addEventListener("click", () => {
+  settingsSelected = searchActivePreset || defaultPresetName;
+  $("viewSearch").className   = "view";
+  $("viewSettings").className = "view active";
+  renderSettingsList();
+});
+
+// ── Settings view ──────────────────────────────────────────────────────────────
+
+$("settingsBackBtn").addEventListener("click", () => {
+  $("viewSettings").className = "view";
+  $("viewSearch").className   = "view active";
+  renderSearchPresetSelect();
+});
+
+function renderSettingsList() {
+  // Ensure main section is visible, edit form hidden
+  $("presetMainSection").classList.remove("off");
+  $("presetEditSection").classList.remove("on");
+
+  const list = $("presetList");
+  list.innerHTML = "";
+
+  assumptionPresets.forEach(p => {
+    const isDefault = p.name === defaultPresetName;
+    const isSelected = p.name === settingsSelected;
+
+    const item = document.createElement("div");
+    item.className = "preset-item" + (isSelected ? " active" : "");
+
+    // Left side: name + default badge
+    const left = document.createElement("div");
+    left.className = "preset-item-left";
+    const nameEl = document.createElement("div");
+    nameEl.className = "preset-item-name";
+    nameEl.textContent = p.name;
+    left.appendChild(nameEl);
+    if (isDefault) {
+      const defEl = document.createElement("div");
+      defEl.className = "preset-default-label";
+      defEl.textContent = "Default";
+      left.appendChild(defEl);
+    }
+    left.addEventListener("click", () => { settingsSelected = p.name; renderSettingsList(); });
+
+    // Right side: edit + delete icons
+    const acts = document.createElement("div");
+    acts.className = "preset-item-actions";
+
+    const editBtn = document.createElement("button");
+    editBtn.className = "btn-preset-icon";
+    editBtn.title = "Edit preset";
+    editBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`;
+    editBtn.addEventListener("click", e => { e.stopPropagation(); openEditForm(p.name); });
+
+    const delBtn = document.createElement("button");
+    delBtn.className = "btn-preset-icon delete";
+    delBtn.title = isDefault ? "Cannot delete the default preset" : "Delete preset";
+    if (isDefault) delBtn.disabled = true;
+    delBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>`;
+    delBtn.addEventListener("click", e => { e.stopPropagation(); deletePreset(p.name); });
+
+    acts.append(editBtn, delBtn);
+    item.append(left, acts);
+    list.appendChild(item);
+  });
+
+  renderPresetValues();
+}
+
+function renderPresetValues() {
+  const p = getPreset(settingsSelected);
+  if (!p) return;
+  $("presetValuesTitle").textContent = p.name;
+  const grid = $("presetValuesGrid");
+  grid.innerHTML = "";
+  PRESET_FIELD_CONFIG.forEach(cfg => {
+    const box = document.createElement("div");
+    box.className = "pvb";
+    box.innerHTML = `<div class="pvb-label">${cfg.label}</div><div class="pvb-value">${fmtPresetVal(cfg.key, p[cfg.key])}</div>`;
+    grid.appendChild(box);
+  });
+}
+
+// ── Add / Edit form ────────────────────────────────────────────────────────────
+
+$("addPresetBtn").addEventListener("click", () => openEditForm(null));
+
+function openEditForm(presetName) {
+  editingPreset = presetName;
+  const isNew = presetName === null;
+  const p = isNew ? SEED_PRESETS[1] : getPreset(presetName); // default to Standard values for new
+
+  $("presetEditTitle").textContent  = isNew ? "New Preset" : `Edit: ${presetName}`;
+  $("presetNameInput").value        = isNew ? "" : presetName;
+  $("presetNameInput").disabled     = !isNew; // renaming not supported to keep references clean
+  $("presetNameError").style.display = "none";
+  $("presetNameError").textContent   = "";
+
+  // Build input fields dynamically
+  const grid = $("presetFormFields");
+  grid.innerHTML = "";
+  PRESET_FIELD_CONFIG.forEach(cfg => {
+    const fieldDiv = document.createElement("div");
+    fieldDiv.className = "field";
+    const label = document.createElement("label");
+    label.className = "field-label";
+    label.htmlFor = `pef_${cfg.key}`;
+    label.textContent = cfg.label;
+
+    const wrap = document.createElement("div");
+    wrap.className = "pef-wrap" + (cfg.prefix ? " has-prefix" : "");
+
+    const inp = document.createElement("input");
+    inp.type = "number"; inp.step = cfg.step; inp.min = cfg.min; inp.max = cfg.max;
+    inp.id = `pef_${cfg.key}`;
+
+    // Display as percentage number or raw dollar
+    const rawVal = p[cfg.key];
+    if (cfg.pct) {
+      const pctVal = rawVal * 100;
+      inp.value = parseFloat(pctVal.toFixed(4)); // avoid floating point noise
+    } else {
+      inp.value = rawVal;
+    }
+
+    if (cfg.prefix) {
+      const pfx = document.createElement("span");
+      pfx.className = "pef-prefix"; pfx.textContent = cfg.prefix;
+      wrap.appendChild(pfx);
+    } else if (cfg.pct) {
+      const sfx = document.createElement("span");
+      sfx.className = "pef-suffix"; sfx.textContent = "%";
+      wrap.appendChild(sfx);
+    }
+    wrap.appendChild(inp);
+    fieldDiv.append(label, wrap);
+    grid.appendChild(fieldDiv);
+  });
+
+  $("presetMainSection").classList.add("off");
+  $("presetEditSection").classList.add("on");
+}
+
+$("savePresetBtn").addEventListener("click", () => {
+  const isNew = editingPreset === null;
+  const name = $("presetNameInput").value.trim();
+
+  if (!name) {
+    $("presetNameError").textContent = "Please enter a preset name.";
+    $("presetNameError").style.display = "block"; return;
+  }
+  if (isNew && assumptionPresets.some(p => p.name.toLowerCase() === name.toLowerCase())) {
+    $("presetNameError").textContent = "A preset with this name already exists.";
+    $("presetNameError").style.display = "block"; return;
+  }
+  $("presetNameError").style.display = "none";
+
+  // Collect and validate field values
+  const newPreset = { name };
+  let valid = true;
+  PRESET_FIELD_CONFIG.forEach(cfg => {
+    const inp = $(`pef_${cfg.key}`);
+    const val = parseFloat(inp.value);
+    if (isNaN(val)) { inp.classList.add("err"); valid = false; return; }
+    inp.classList.remove("err");
+    newPreset[cfg.key] = cfg.pct ? val / 100 : val;
+  });
+  if (!valid) return;
+
+  if (isNew) {
+    assumptionPresets.push(newPreset);
+  } else {
+    const idx = assumptionPresets.findIndex(p => p.name === editingPreset);
+    if (idx >= 0) assumptionPresets[idx] = newPreset;
+  }
+
+  settingsSelected = name;
+  savePresetsStorage();
+  renderSettingsList();
+});
+
+$("cancelPresetBtn").addEventListener("click", () => {
+  $("presetMainSection").classList.remove("off");
+  $("presetEditSection").classList.remove("on");
+});
+
+function deletePreset(name) {
+  if (name === defaultPresetName) return;
+  if (!confirm(`Delete preset "${name}"?`)) return;
+  assumptionPresets = assumptionPresets.filter(p => p.name !== name);
+  if (settingsSelected   === name) settingsSelected   = defaultPresetName;
+  if (searchActivePreset === name) searchActivePreset = defaultPresetName;
+  savePresetsStorage();
+  renderSettingsList();
+}
+
+// "Save as Default" — sets currently selected preset as the default + active for searches
+$("saveProfileBtn").addEventListener("click", () => {
+  defaultPresetName  = settingsSelected;
+  searchActivePreset = settingsSelected;
+  savePresetsStorage();
+  renderSettingsList();
+  const btn = $("saveProfileBtn");
+  const orig = btn.textContent;
+  btn.textContent = "Saved ✓";
+  setTimeout(() => { btn.textContent = orig; }, 1500);
+});
 
 // ── Init ───────────────────────────────────────────────────────────────────────
 buildMatrix();
