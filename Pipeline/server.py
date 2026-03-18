@@ -94,6 +94,12 @@ def add_cors(response):
 def preflight():
     return make_response("", 204)
 
+@app.route("/crm/templates", methods=["OPTIONS"])
+@app.route("/crm/templates/<template_id>", methods=["OPTIONS"])
+@app.route("/crm/analyze", methods=["OPTIONS"])
+def crm_templates_preflight():
+    return make_response("", 204)
+
 
 # ── Helpers ──────────────────────────────────────────────────────────────────────
 def _gen_search_id() -> str:
@@ -218,7 +224,7 @@ def vite_assets(filename):
 
 
 # ── Deals API ─────────────────────────────────────────────────────────────────────
-from supabase_client import fetch_deals, get_download_url, update_deal_stage
+from supabase_client import fetch_deals, get_download_url, update_deal_stage, fetch_deal_by_id
 
 @app.route("/deals", methods=["GET"])
 def deals():
@@ -395,3 +401,108 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5001))
     log.info(f"Ping Pipeline Server starting on http://0.0.0.0:{port}")
     app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
+
+
+# ── Templates API ─────────────────────────────────────────────────────────────
+from supabase_client import fetch_templates, fetch_template_by_id, insert_template, update_template, delete_template
+
+@app.route("/crm/templates", methods=["GET"])
+def crm_list_templates():
+    api_key = request.args.get("api_key", "").strip()
+    if not api_key or api_key not in USERS:
+        return jsonify({"ok": False, "error": "Unauthorized"}), 403
+    try:
+        templates = fetch_templates(api_key)
+        return jsonify({"ok": True, "templates": templates}), 200
+    except Exception as e:
+        log.error(f"Error fetching templates: {e}", exc_info=True)
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+@app.route("/crm/templates", methods=["POST"])
+def crm_create_template():
+    data = request.get_json(force=True, silent=True) or {}
+    api_key = data.pop("api_key", "").strip()
+    if not api_key or api_key not in USERS:
+        return jsonify({"ok": False, "error": "Unauthorized"}), 403
+    user = USERS[api_key]
+    data["api_key"] = api_key
+    data["email"] = user["email"]
+    if "combos" not in data:
+        data["combos"] = []
+    try:
+        template = insert_template(data)
+        return jsonify({"ok": True, "template": template, "template_id": template["id"]}), 201
+    except Exception as e:
+        log.error(f"Error creating template: {e}", exc_info=True)
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+@app.route("/crm/templates/<template_id>", methods=["PATCH"])
+def crm_update_template(template_id):
+    data = request.get_json(force=True, silent=True) or {}
+    api_key = data.pop("api_key", "").strip()
+    if not api_key or api_key not in USERS:
+        return jsonify({"ok": False, "error": "Unauthorized"}), 403
+    try:
+        template = update_template(template_id, api_key, data)
+        return jsonify({"ok": True, "template": template}), 200
+    except Exception as e:
+        log.error(f"Error updating template: {e}", exc_info=True)
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+@app.route("/crm/templates/<template_id>", methods=["DELETE"])
+def crm_delete_template(template_id):
+    api_key = request.args.get("api_key", "").strip()
+    if not api_key or api_key not in USERS:
+        return jsonify({"ok": False, "error": "Unauthorized"}), 403
+    try:
+        delete_template(template_id, api_key)
+        return jsonify({"ok": True}), 200
+    except Exception as e:
+        log.error(f"Error deleting template: {e}", exc_info=True)
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+@app.route("/crm/analyze", methods=["POST"])
+def crm_analyze():
+    """Run the underwriting pipeline from a saved template."""
+    data = request.get_json(force=True, silent=True) or {}
+    api_key = data.get("api_key", "").strip()
+    if not api_key or api_key not in USERS:
+        return jsonify({"ok": False, "error": "Unauthorized"}), 403
+    template_id = data.get("template_id", "").strip()
+    if not template_id:
+        return jsonify({"ok": False, "error": "template_id is required"}), 400
+    template = fetch_template_by_id(template_id, api_key)
+    if not template:
+        return jsonify({"ok": False, "error": "Template not found"}), 404
+    if _lock.locked():
+        return jsonify({"ok": False, "error": "Server is busy. Try again in a moment."}), 503
+    user = USERS[api_key]
+    search_id = _gen_search_id()
+    payload = {
+        "api_key": api_key,
+        "email": user["email"],
+        "searchId": search_id,
+        "address": template.get("address", ""),
+        "lat": template.get("lat"),
+        "lng": template.get("lng"),
+        "price": template.get("price"),
+        "cost": template.get("improvements"),
+        "sqft": template.get("sqft"),
+        "radius": template.get("radius", 0.5),
+        "minComps": template.get("min_comps"),
+        "maxComps": template.get("max_comps"),
+        "combos": template.get("combos", []),
+        "commercial": template.get("commercial_spaces", []),
+        "assumptions": assumptions.load(api_key),
+    }
+    log.info(f"Analyze: {search_id} | {user['name']} <{user['email']}> | {template.get('address','?')}")
+    def _run():
+        with _lock:
+            try:
+                log.info(f"[{search_id}] Pipeline starting from template {template_id}...")
+                run_pipeline_from_payload(payload)
+                log.info(f"[{search_id}] Pipeline complete.")
+            except Exception as exc:
+                log.error(f"[{search_id}] Pipeline error: {exc}", exc_info=True)
+    Thread(target=_run, daemon=True).start()
+    return jsonify({"ok": True, "searchId": search_id, "status": "started"}), 200
