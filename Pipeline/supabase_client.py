@@ -132,49 +132,71 @@ def insert_deal(meta: dict) -> None:
     resp.raise_for_status()
 
 
+# Columns fetched for deal lists — excludes binary blobs (excel_data, docx_data, comp_rows)
+DEAL_SELECT = (
+    "id,search_id,address,short_address,email,api_key,price,cost,sqft,"
+    "total_units,radius,deal_stage,combos,comp_summary,excel_path,docx_path,"
+    "status,created_at,preset_name"
+)
+
+def _to_float(val):
+    try:
+        return float(val) if val is not None else None
+    except (TypeError, ValueError):
+        return None
+
+def _to_int(val):
+    try:
+        return int(val) if val is not None else None
+    except (TypeError, ValueError):
+        return None
+
+def _normalize_deal(row: dict) -> dict:
+    """Reshape a raw DB row to match the frontend Deal type."""
+    row["stage"] = row.pop("deal_stage", None) or "New"
+    row["search_meta"] = {
+        "address": row.get("address", ""),
+        "price": _to_float(row.get("price")),
+        "listing_price": _to_float(row.get("price")),
+        "cost": _to_float(row.get("cost")),
+        "sqft": _to_float(row.get("sqft")),
+        "total_units": _to_int(row.get("total_units")),
+        "radius": _to_float(row.get("radius")),
+        "combos": row.get("combos") or [],
+    }
+    return row
+
 def fetch_deals(api_key: str | None = None) -> list[dict]:
     """
-    Return all deals newest first.
-    If api_key is provided, filter to that user's deals only.
+    Return all deals newest first, normalized to match the frontend Deal type.
+    Excludes binary blob columns to keep payload small.
     """
     url, key = _get_credentials()
-    endpoint = f"{url}/rest/v1/{TABLE}"
-
-    params: dict = {"select": "*", "order": "created_at.desc"}
+    params: dict = {"select": DEAL_SELECT, "order": "created_at.desc"}
     if api_key:
         params["api_key"] = f"eq.{api_key}"
-
     resp = requests.get(
-        endpoint,
+        f"{url}/rest/v1/{TABLE}",
         params=params,
         headers=_headers(key, {"Prefer": "return=representation"}),
     )
     resp.raise_for_status()
-    return resp.json() or []
-
+    return [_normalize_deal(row) for row in (resp.json() or [])]
 
 def fetch_deal_by_id(search_id: str, api_key: str | None = None) -> dict | None:
-    """
-    Return a single deal by search_id, or None if not found.
-    Optionally scoped to a specific api_key for access control.
-    """
+    """Return a single deal by search_id, normalized, or None if not found."""
     url, key = _get_credentials()
-    endpoint = f"{url}/rest/v1/{TABLE}"
-
-    params: dict = {"select": "*", "search_id": f"eq.{search_id}", "limit": "1"}
+    params: dict = {"select": DEAL_SELECT, "search_id": f"eq.{search_id}", "limit": "1"}
     if api_key:
         params["api_key"] = f"eq.{api_key}"
-
     resp = requests.get(
-        endpoint,
+        f"{url}/rest/v1/{TABLE}",
         params=params,
         headers=_headers(key, {"Prefer": "return=representation"}),
     )
     resp.raise_for_status()
     results = resp.json()
-    return results[0] if results else None
-
-
+    return _normalize_deal(results[0]) if results else None
 def update_deal_stage(search_id: str, stage: str) -> None:
     """Update the deal_stage for a given search_id."""
     url, key = _get_credentials()
