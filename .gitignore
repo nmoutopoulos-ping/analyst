@@ -1,26 +1,24 @@
-# Secrets
-Pipeline/config.json
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 
-# Pipeline runtime
-Pipeline/output/
-Pipeline/processed.json
-Pipeline/__pycache__/
-Pipeline/*.pyc
-__pycache__/
-*.pyc
+node_modules
+dist
+dist-ssr
+*.local
 
-# Extension artifacts
-Extension/ping-analyst_v1.zip
-
-# Word docs (generated output)
-*.docx
-
-# OS / tools
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
 .DS_Store
-node_modules/
-.env
-
-# Lock files & duplicates
-*.~lock.*
-Extension/**/*.zip
-Extension/.claude/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

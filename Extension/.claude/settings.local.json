@@ -1,7 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(unzip /Users/niko/Desktop/Ping/src.zip -d /Users/niko/Desktop/Ping/src_extracted)"
-    ]
-  }
-}
