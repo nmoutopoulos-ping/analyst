@@ -136,7 +136,7 @@ def insert_deal(meta: dict) -> None:
 DEAL_SELECT = (
     "id,search_id,address,short_address,email,api_key,price,cost,sqft,"
     "total_units,radius,deal_stage,combos,comp_summary,excel_path,docx_path,"
-    "status,created_at,preset_name"
+    "status,created_at,preset_name,results,archived"
 )
 
 def _to_float(val):
