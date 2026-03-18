@@ -19,8 +19,9 @@ const AppSidebar = () => {
   return (
     <aside className="fixed left-0 top-0 h-screen w-56 bg-secondary flex flex-col z-50">
       <div className="px-5 py-5 border-b border-sidebar-border">
-        <h1 className="text-lg font-semibold text-secondary-foreground tracking-tight">
+        <h1 className="text-lg font-semibold text-secondary-foreground tracking-tight relative inline-block pb-1">
           Analyst<span className="text-primary">CRE</span>
+          <span className="absolute bottom-0 left-0 w-full h-[2px] bg-gradient-to-r from-primary/80 to-primary/20 rounded-full" />
         </h1>
       </div>
 
