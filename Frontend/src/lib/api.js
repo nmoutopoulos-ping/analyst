@@ -19,14 +19,14 @@ async function request(path, options = {}) {
 }
 
 // ── Auth ────────────────────────────────────────────────
-export async function login(apiKey, password) {
+export async function login(email, code) {
   return request('/crm/login', {
     method: 'POST',
-    body: JSON.stringify({ api_key: apiKey, password }),
+    body: JSON.stringify({ email, api_key: code }),
   })
 }
 
-// ── Pipeline ─────────────────────────────────────────────
+// ── Pipeline ───────────────────────────────────────────────────
 export async function triggerAnalysis(payload) {
   return request('/trigger', {
     method: 'POST',
@@ -34,7 +34,7 @@ export async function triggerAnalysis(payload) {
   })
 }
 
-// ── Deals ────────────────────────────────────────────────
+// ── Deals ────────────────────────────────────────────────────
 export async function fetchDeals() {
   return request(`/deals?api_key=${encodeURIComponent(getApiKey())}`)
 }
@@ -50,7 +50,7 @@ export function dealDownloadUrl(searchId, fileType) {
   return `${BASE}/deals/${searchId}/download/${fileType}?api_key=${encodeURIComponent(getApiKey())}`
 }
 
-// ── Settings / Assumptions ───────────────────────────────
+// ── Settings / Assumptions ───────────────────────────────────────────
 export async function fetchSettings() {
   return request(`/settings?api_key=${encodeURIComponent(getApiKey())}`)
 }
