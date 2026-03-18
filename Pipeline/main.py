@@ -34,6 +34,7 @@ from excel_writer import populate_raw_comps, populate_assumptions, populate_inpu
 from docx_writer import generate_summary_docx
 from emailer import generate_summary
 from supabase_client import upload_deal_file, insert_deal
+from assumptions import compute_returns
 
 
 # ── Shared pipeline core ────────────────────────────────────────────────────────
@@ -99,6 +100,32 @@ def _run_search(search_id: str, search_meta: dict,
                                   "count": 0, "avg_rent": 0, "avg_sqft": 0, "units": u})
     comp_summary.sort(key=lambda s: (float(s["beds"]), float(s["baths"])))
 
+
+    # Compute financial returns for the deal card display
+    try:
+        _price_num = float(search_meta.get("price") or 0)
+        _cost_num = float(search_meta.get("cost") or 0)
+        _total_units_num = int(float(search_meta.get("totalUnits") or 0))
+        _res_annual = sum(
+            float(s.get("avg_rent") or 0) * int(float(s.get("units") or 0)) * 12
+            for s in comp_summary
+            if s.get("avg_rent") and s.get("units")
+        )
+        _com_annual = sum(
+            float(s.get("sqft") or 0) * float(s.get("rentPerSF") or 0)
+            for s in commercial_spaces
+            if s.get("sqft") and s.get("rentPerSF")
+        )
+        _total_annual = _res_annual + _com_annual
+        deal_results = (
+            compute_returns(_total_annual, _total_units_num, _price_num, _cost_num, assump)
+            if (_price_num and _total_annual and _total_units_num)
+            else None
+        )
+    except Exception as _e:
+        print(f"  [WARN] Could not compute deal returns: {_e}")
+        deal_results = None
+
     # 3. Populate Excel model
     print(f"  [3] Populating Excel model...")
     short_name  = shorten_address(search_meta["address"])
@@ -155,6 +182,7 @@ def _run_search(search_id: str, search_meta: dict,
         "preset_name":   search_meta.get("preset_name", ""),
         "excel_path":    excel_storage_path,
         "docx_path":     docx_storage_path,
+        "results":       deal_results,
         "status":        "complete",
     }
     insert_deal(deal_row)
