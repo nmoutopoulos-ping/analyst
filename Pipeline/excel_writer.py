@@ -184,7 +184,11 @@ def populate_assumptions(ws, search_meta: dict, combos: list,
         if key not in seen:
             seen.add(key); unique.append(c)
 
-    for i in range(20 - 16 + 1):
+            # Pre-clear rows 16–25 to remove stale data from previous runs
+        for _r in range(16, 26):
+            for _col in (2, 3, 4, 5):
+                ws.cell(row=_r, column=_col).value = None
+        for i in range(20 - 16 + 1):
         r = 16 + i
         if i < len(unique):
             c = unique[i]
@@ -297,7 +301,11 @@ def populate_inputs(ws, search_meta: dict, combos: list,
         if key not in seen:
             seen.add(key); unique.append(c)
 
-    for i in range(19 - 13 + 1):
+            # Pre-clear rows 13–25 to remove stale data from previous runs
+        for _r in range(13, 26):
+            for _col in range(1, 9):
+                ws.cell(row=_r, column=_col).value = None
+        for i in range(19 - 13 + 1):
         r = 13 + i
         if i < len(unique):
             c = unique[i]
@@ -318,10 +326,10 @@ def populate_inputs(ws, search_meta: dict, combos: list,
             ws.cell(row=r, column=2, value=beds).font           = BLUE_FONT
             ws.cell(row=r, column=3, value=ba).font             = BLUE_FONT
             ws.cell(row=r, column=4, value=n_units).font        = BLUE_FONT
-            ws.cell(row=r, column=5, value=cs.get("avg_sqft") or None).font = BLUE_FONT
-            ws.cell(row=r, column=6, value=cs.get("avg_rent") or None).font = BLUE_FONT
+            ws.cell(row=r, column=5, value=cs.get("avg_rent")).font = BLUE_FONT  # Avg Rent/Mo
+            ws.cell(row=r, column=6, value=cs.get("avg_sqft")).font = BLUE_FONT  # Avg SF
             d = ws.cell(row=r, column=4).column_letter
-            f = ws.cell(row=r, column=6).column_letter
+            f = ws.cell(row=r, column=5).column_letter  # avg_rent is now in col 5
             g = ws.cell(row=r, column=7).column_letter
             ws.cell(row=r, column=7, value=f"={d}{r}*{f}{r}").font = Font(name="Arial", size=9)
             ws.cell(row=r, column=8, value=f"={g}{r}*12").font     = Font(name="Arial", size=9)
